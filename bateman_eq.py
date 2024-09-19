@@ -11,6 +11,7 @@ from SALib.sample.sobol import sample
 from SALib.test_functions import Ishigami
 import numpy as np
 
+
 # Define the model inputs
 problem = {
     'num_vars': 3,
@@ -19,7 +20,6 @@ problem = {
                [-3.14159265359, 3.14159265359],
                [-3.14159265359, 3.14159265359]]
 }
-
 # Generate samples
 param_values = sample(problem, 1024)
 
@@ -84,20 +84,24 @@ problem  = { 'num_vars':  4, # Numero di parametri
 
 # Numero di campioni da generare
 
-num_samples = 1000
+num_samples = 2**10
 
 param_values = np.zeros((num_samples, problem['num_vars']))
 
 
-for i in range(problem['num_vars']):
-    lower_bound, upper_bound = problem['bounds'][i]
-    param_values[:, i] = np.random.uniform(lower_bound, upper_bound, num_samples)
+## ----- Uniform Distribution Sampling -----
+# for i in range(problem['num_vars']):
+#    lower_bound, upper_bound = problem['bounds'][i]
+#    param_values[:, i] = np.random.uniform(lower_bound, upper_bound, num_samples)
 
+# output_values = np.array([bateman_equation(params[0],  [params[1], params[2], params[3]], 100) for params in param_values])
+# --------------------------------------------------
 
-print(param_values)
-param_values[1]
+ # Generate samples
+param_values = sample(problem, 1000)
 
-output_values = np.array([bateman_equation(params[0],  [params[1], params[2], params[3]], 100) for params in param_values])
+# Execute model
+output_values = np.array([model(param[0], param[1:4]) for param in param_values])
 
 for row in param_values:
     bateman_equation(row[0], row[1:], 100)

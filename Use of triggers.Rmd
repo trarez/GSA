@@ -1,0 +1,762 @@
+---
+title: "Use of Triggers for MOMP: a tutorial"
+output: html_notebook
+---
+
+As already known from the previous notebooks, *global sensitivity analysis* examines the model output sensitivity when varying all uncertain inputs *simultaneously* across their entire value range. 
+
+An extension of GSA can be performed on sample assumptions made in the course of a specific analysis, simulating an analysis done by multiple teams/researchers tackling the same (unspecified) problem.
+
+A *robustification* is hence performed by varying assumptions so that an Uncertainty Analysis (UA) and Sensitivity Analysis (SA) can be performed on these variations. This is essentially what *Modelling of the Modelling Process* is.
+
+The MOMP can be performed in a Montecarlo framework, by defining random triggers that determine the model to be followed in each simulation. In this way, predictions are combined from these models while accounting simultaneously for the uncertainty associated with each model's parameters. Random triggers can be then considered as source of added uncertainty.
+
+At each iteration combination of triggers, these are sampled randomly in an independent way, leading to a different identifiable model.
+
+---
+
+# Example 1: Use of triggers in a Sobol' G Function, absolute values vs no absolute values
+
+To proceed step-by-step, a simple example of MOMP using triggers on the Sobol Function is performed, with a slight modification. As we already know from the previous notebook, the Sobol' G Function is a benchmark function for global sensitivity analysis. The function is defined as follows:
+
+$$ Y = \prod_{i = 1}^k \frac{|4X_i - 2| + a_i}{1 + a_i} \\ k = 8 \\ X_i \sim U[0, 1] \\ a = (0, 1, 4.5, 9, 99, 99, 99, 99) $$
+... but here with a caveat.
+Let's imagine, in this context, that the researcher does not know the correct specification, it is unsure whether the term $4X_i - 2$ is in absolute values or not. Trigger permits to explore the uncertainty for both cases simultaneously. Defined a binary choice, at each iteration one of the two model will be randomly selected between the two options.
+
+## Coding, setting up the global environment:
+```{r message=FALSE, warning=FALSE, include=FALSE}
+install_and_load <- function(packages) {
+  # Check for missing packages
+  new_packages <- packages[!(packages %in% installed.packages()[,"Package"])]
+  
+  # Install missing packages
+  if(length(new_packages)) {
+    message("Installing packages: ", paste(new_packages, collapse = ", "))
+    install.packages(new_packages, dependencies = TRUE)
+  }
+  
+  # Load all packages
+  loaded_packages <- character()
+  for(pkg in packages) {
+    if(!require(pkg, character.only = TRUE, quietly = TRUE)) {
+      warning("Failed to load package: ", pkg)
+    } else {
+      loaded_packages <- c(loaded_packages, pkg)
+    }
+  }
+  
+  # Report results
+  if(length(loaded_packages) > 0) {
+    message("Successfully loaded packages: ", paste(loaded_packages, collapse = ", "))
+  }
+  if(length(loaded_packages) < length(packages)) {
+    missing <- setdiff(packages, loaded_packages)
+    warning("Failed to load packages: ", paste(missing, collapse = ", "))
+  }
+}
+
+install_and_load(c(
+                "tibble",
+                "sensobol",
+                "ggplot2",
+                "tidyverse",
+                "data.table",
+                "gridExtra",
+                "rugarch",
+                "quantmod",
+                "microbenchmark"
+                ))
+```
+
+Ensure reproducibility by setting a seed:
+```{r}
+set.seed(100)
+```
+
+Define the common parameters of interest for our sensitivity analysis:
+```{r}
+N <- 2^11; # Number of samples
+
+first <- "saltelli"
+total <- "jansen"
+# Specify the type of sensitivity indices for the function "sobol_indices".
+# "saltelli" for first-order effects and "jansen" for total-order effects are the default choices for the sensobol function.
+
+R<-10^3 # Number of replications bootstrap
+```
+
+The first-order sensitivity index $S_i$ "*saltelli*" is calculated as:
+
+$$\frac{\frac{1}{N} \sum_{v=1}^{N} f(\mathbf{B})_v \left[ f\left( \mathbf{A}_{\mathbf{B}}^{(i)} \right)_v - f(\mathbf{A})_v \right]}{V(y)}$$
+
+The total-order sensitivity index $T_i$ "*jansen*" is calculated as:
+
+$$\frac{\frac{1}{2N} \sum_{v=1}^{N} \left[ f(\mathbf{A})_v - f\left( \mathbf{A}_{\mathbf{B}}^{(i)} \right)_v \right]^2}{V(y)}$$
+Both formulas come from [Saltelli et al. (2010)](https://www.sciencedirect.com/science/article/pii/S0010465509003087).
+
+Now define the Sobol' G Function with the two possible specifications:
+```{r}
+sobol_Fun_0 <- function(X, vector) {
+  # Model/function with absolute values
+  y <- 1
+  
+  for (j in 1:length(vector)) {
+    y <- y * (abs(4 * X[, j] - 2) + vector[j])/(1 + vector[j])
+  }
+  return(y)
+}
+
+sobol_Fun_1 <- function(X, vector) {
+  # Model/function without absolute values
+  y <- 1
+  
+  for (j in 1:length(vector)) {
+    y <- y * (4 * X[, j] - 2 + vector[j])/(1 + vector[j])
+  }
+  return(y)
+}
+```
+
+The specific parameters of the Sobol' G Function are then defined.
+Again, the $a_i$ values are arbitrary; the higher they are, the less sensible the output is to the specific input.
+```{r}
+a_vector <- c(0, 1, 4.5, 9, 99, 99, 99, 99)
+
+k <- length(a_vector) #number of parameters
+params <- c(paste("x", 1:k, sep = ""), "trigger") # Parameters names, with the trigger
+```
+
+A specific function is created in order to be applied on each row of the design matrix. The two different Sobol' G Functions are then run according to the trigger value:
+```{r}
+run_model <- function(X) {
+  trigger <- X["trigger"]
+  X_input <- X[!names(X) %in% "trigger"]  # Select all columns except "trigger"
+  
+  if (trigger == 0) {
+    return(sobol_Fun_0(matrix(X_input, nrow=1), a_vector))
+  } else {
+    return(sobol_Fun_1(matrix(X_input, nrow=1), a_vector))
+  }
+}
+```
+
+The sample matrix is defined and the columns are appropriately transformed. In our case, we just need to discretize the "trigger" variable.
+
+- ** 0: Sobol' G Function with absolute values **
+- ** 1: Sobol' G Function without absolute values **
+```{r}
+mat <- data.table(sobol_matrices(params = params, N = N, type = "R"))
+
+# Transform the trigger variable to binary
+mat[, trigger := ifelse(trigger > 0.5, 1, 0)]
+
+# Just to make sure, given that 'type = "R" ' provides random uniform[0,1] values for each column and the trigger split is defined at its median value, we can check the percentage of 1's.
+
+cat("The ratio of 1's (active triggers) is", sum(mat[, trigger])/nrow(mat)) # Should be around 0.5
+```
+
+The outputs are computed and their distribution (*uncertainty analysis*) is computed:
+```{r warning=FALSE}
+# Compute model outputs
+y <- apply(mat, 1, run_model)
+
+# Plot the distribution of the output with sensobol function
+plot_uncertainty(y, N = N) + labs(title = "Output Distribution of Sobol' G Function under trigger")
+```
+
+The same plot, but with improved visualizations:
+```{r}
+improvedSobolTriggUA <- ggplot(data.frame(y), aes(x = y)) +
+                        geom_histogram(bins = 30, fill = "steelblue", color = "black", alpha = 0.7) +
+                        theme_minimal() + labs(y = "") + 
+                        theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+                                axis.title = element_text(size = 12),
+                                axis.text = element_text(size = 10))
+
+improvedSobolTriggUA + labs(title = "Output Distribution of Triggered Sobol' G Functions",
+                       x = "Y", y = "")
+```
+The sensitivity indices are computed and then plotted, again with the `sensobol` package:
+```{r}
+# Compute sensitivity indices
+ind <- sensobol::sobol_indices(Y = y, N = N, params = params, first = first, total = total, boot = TRUE, R = R)
+```
+
+A table is displayed with all the relevant calculated measures:
+```{r}
+ind
+```
+
+To improve the table visualization, we filter by `Si` and `Ti` and set the number of decimal digits in each numerical column to 5:
+
+- First-order Si:
+```{r}
+as.data.frame(ind[1]) %>% 
+    mutate(across(1:5, ~round(., 5))) %>%
+    filter(results.sensitivity == "Si")
+```
+
+- Total-order Ti:
+```{r}
+as.data.frame(ind[1]) %>% 
+    mutate(across(1:5, ~round(., 5))) %>%
+    filter(results.sensitivity == "Ti")
+```
+
+```{r}
+plot(ind) + labs(title = "Sobol' G Function under trigger") + theme(legend.position = "right")
+```
+This is the best way to visualize and assess the results, in this case with the use of triggers. 
+
+The trigger has the most important role in defining the output. This is suggested - recalling the UA - by the fact that the output domain the output domain extends into the negative range.
+
+We can compare these indices with the original Sobol G' Function indices.
+
+## Comparison: Single Original Sobol' G Function vs Triggered
+
+Create the same design matrix, without the trigger columns, and compute the results:
+```{r}
+params <- paste("x", 1:k, sep = "") # remember k is the length of a_vector
+
+mat1 <- data.table(sobol_matrices(params = params, N = N, type = "R"))
+y1 <- sobol_Fun_0(as.matrix(mat1), a_vector)
+ind1 <- sobol_indices(Y = y1, N = N, params = params, first = first, total = total, boot = TRUE, R = R)
+
+# Define the improved uncertainty plot without running it:
+
+improvedSobolUA <- ggplot(data.frame(y1), aes(x = y1)) +
+                  geom_histogram(bins = 30, fill = "steelblue", color = "black", alpha = 0.7) +
+                  theme_minimal() + labs(y = "") + 
+                  theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+                        axis.title = element_text(size = 12),
+                        axis.text = element_text(size = 10)
+                  )
+```
+
+The uncertainty analysis for the original Sobol G' Function is performed, and compared with the triggered one:
+```{r}
+# Define multiple plotting: 1 row 2 columns
+grid.arrange(improvedSobolUA + labs(title = "UA Original Sobol' G") ,
+             improvedSobolTriggUA + labs(title = "UA Triggered Sobol' G"),
+             nrow = 1)
+```
+The output distribution is, in the triggered case, more spread out as expected. This is because it involves negative values in the output domain. 
+
+The sensitivity indices are then compared:
+```{r}
+grid.arrange(plot(ind1) + labs(title = "GSA Original Sobol' G") + theme(legend.position = "none"),
+             plot(ind) + labs(title = "GSA Triggered Sobol' G") + theme(legend.position = "none"),
+             nrow = 1)
+             
+```
+# Example 2: Use of triggers with a simple modified Sobol' G Function
+
+$$ Y = \prod_{i = 1}^k \frac{|4X_i - 2| + 1.1 \cdot a_i}{1 + a_i} \\ k = 8 \\ X_i \sim U[0, 1] \\ a = (0, 1, 4.5, 9, 99, 99, 99, 99) $$
+
+Another example is shown. The trigger is now used to see how the output is affected by the choice of the model. The trigger is defined as before, with a binary choice between the two models.
+
+Define the parameters of interest for our sensitivity analysis:
+```{r}
+a_vector <- c(0, 1, 4.5, 9, 99, 99, 99, 99)
+
+N <- 2^11; # Number of samples
+k <- length(a_vector) #number of parameters
+params <- c(paste("x", 1:k, sep = ""), "trigger") # Parameters names, with the trigger
+
+first <- "saltelli"
+total <- "jansen"
+# Specify the type of sensitivity indices for the function "sobol_indices".
+# "saltelli" for first-order effects and "jansen" for total-order effects are the default choices for the sensobol function.
+
+
+R<-10^3 # Number of replications bootstrap
+```
+
+Define the functions:
+```{r}
+sobol_Fun_0 <- function(X, vector) {
+  # Original Sobol' G Function
+  y <- 1
+  
+  for (j in 1:length(vector)) {
+    y <- y * (abs(4 * X[, j] - 2) + vector[j])/(1 + vector[j])
+  }
+  return(y)
+}
+
+sobol_Fun_1 <- function(X, vector) {
+  # Sobol' G Function with a the added coeffi
+  y <- 1
+  
+  for (j in 1:length(vector)) {
+    y <- y * (abs(4 * X[, j] - 2) + vector[j])/(1 + 1.1 * vector[j])
+  }
+  return(y)
+}
+```
+
+- **0**: Original Sobol' G Function
+- **1**: Sobol' G Function with modification
+
+```{r}
+run_model <- function(X) {
+  trigger <- X["trigger"]
+  X_input <- X[!names(X) %in% "trigger"]  # Select all columns except "trigger"
+  
+  if (trigger == 0) {
+    return(sobol_Fun_0(matrix(X_input, nrow=1), a_vector))
+  } else {
+    return(sobol_Fun_1(matrix(X_input, nrow=1), a_vector))
+  }
+}
+```
+
+Define the design matrix and compute the results:
+```{r}
+mat <- data.table(sobol_matrices(params = params, N = N, type = "R"))
+
+# Transform the trigger variable to binary
+mat[, trigger := ifelse(trigger > 0.5, 1, 0)]
+
+# Compute model outputs
+y <- apply(mat, 1, run_model)
+```
+
+
+```{r}
+ggplot(data.frame(y), aes(x = y)) +
+       geom_histogram(bins = 30, fill = "steelblue", color = "black", alpha = 0.7) +
+       theme_minimal() + labs(title = "UA with Trigger", y = "", x = "Outputs") + 
+       theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+               axis.title = element_text(size = 12),
+               axis.text = element_text(size = 10))
+```
+
+The sensitivity indices are computed and then plotted:
+```{r}
+# Compute sensitivity indices
+ind <- sensobol::sobol_indices(Y = y, N = N, params = params, first = first, total = total, boot = TRUE, R = R)
+```
+
+```{r}
+plot(ind) + labs(title = "Sobol' G Function under Triggers") + theme(legend.position = "right")
+```
+Now the trigger is less important in defining the output.
+
+# Example 3: Use of triggers to compare Sobol' G and Sobol' G*-functions
+
+An extension of the Sobol G function is used in tandem with the original one. This extension permits to avoid the QUASI-RANDOM PROBLEM when computing the first observation. It is defined as follows:
+
+$$ G^*(X_1, \ldots, X_k, a_1, \ldots, a_k, \delta_1, \ldots, \delta_k, \alpha_1, \ldots, \alpha_k) = \prod_{i=1}^k g_i^*, $$
+
+$$g_i^* = \frac{(1 + \alpha_i) \cdot \left|2(X_i + \delta_i - I[X_i + \delta_i]) - 1\right|^{\alpha_i} + a_i}{1 + a_i}$$
+$X_i$ are assumed to be $U \sim [0,1]$, $a_i \in \mathcal{R}^+ \space \forall i = 1, \dots, k$. 
+
+The additional parameters are the *shift* $\delta_i \in [0,1]$ and the *curvature* $\alpha_i \in \mathcal{R}^+$. 
+When $\delta_i = 0$ and $\alpha_i = 1$, the function is equivalent to the original Sobol' G function.
+
+The mean is defined as:
+$E(G^*(X_i, a_i, \alpha_i)) = 1$ because each $X_i$ has mean equal to 1.
+
+The variance is defined as:
+$V(G^*(X_i, a_i, \alpha_i)) = \frac{\alpha_i^2}{(1+2\alpha_i)(1+a_i)^2}$
+
+The coding proceeds as before.
+
+Ensure reproducibility by setting a seed:
+```{r}
+set.seed(100)
+```
+
+Define the common parameters of interest of both functions for our sensitivity analysis:
+```{r}
+N <- 2^11; # Number of samples
+
+first <- "saltelli"
+total <- "jansen" # Specify the type of sensitivity indices for the function "sobol_indices".
+
+R<-10^3 # Number of replications bootstrap
+
+a_vector <- c(0, 1, 4.5, 9, 99, 99, 99, 99)
+k <- length(a_vector) # Number of parameters
+params <- c(paste("x", 1:k, sep = ""), "trigger") # Parameters names, with the trigger
+```
+
+Again, the $a_i$ values are arbitrary; the higher they are, the less sensible the output is to the specific input.
+
+Define the specific parameters of the Sobol' G* Function. These could be sampled as well, but for now we choose arbitrary values:
+```{r}
+delta <- runif(1, 0, 1) # Shift
+alpha <- 0.7 # Curvature
+```
+
+Now define the Sobol' G and the Sobol' G* functions:
+```{r}
+sobol_Fun_0 <- function(X, a_vector) {
+  # Model/function with absolute values
+  y <- 1
+  
+  for (j in 1:length(a_vector)) {
+    y <- y * (abs(4 * X[, j] - 2) + a_vector[j])/(1 + a_vector[j])
+  }
+  return(y)
+}
+
+sobol_Fun_Star <- function(X, a_vector, delta, alpha) {
+  y <- 1
+  # Ensure constraints are met
+  if (alpha <= 0) stop("alpha_i must be greater than 0")
+  if (delta < 0 || delta > 1) stop("delta_i must be between 0 and 1")
+  
+  for (j in 1:length(a_vector)) {
+    # Indicator function is the integer part of its inner value
+    I <- floor(X[, j] + delta)
+    
+    # Calculate g_i*
+    numerator <- (1 + alpha) * abs(2 * (X[, j] + delta - I) - 1)^alpha + a_vector[j]
+    g_star <- numerator / (1 + a_vector[j])
+    
+    y <- y * g_star
+  }
+  return(y)
+}
+```
+
+A specific function is created in order to be applied on each row of the design matrix. The two different Sobol' G Functions are then run according to the row-specific trigger value:
+```{r}
+run_model <- function(X) {
+  trigger <- X["trigger"]
+  X_input <- X[!names(X) %in% "trigger"]  # Select all columns except "trigger"
+  
+  if (trigger == 0) {
+    return(sobol_Fun_0(matrix(X_input, nrow=1), a_vector))
+  } else {
+    return(sobol_Fun_Star(matrix(X_input, nrow=1), a_vector, delta, alpha))
+  }
+}
+```
+
+The sample matrix is defined and the columns are appropriately transformed. In our case, we just need to discretize the "trigger" variable.
+
+- ** 0: Sobol' G Function **
+- ** 1: Sobol' G* Function **
+
+```{r}
+mat <- data.table(sobol_matrices(params = params, N = N, type = "R"))
+
+# Transform the trigger variable to binary
+mat <- (mat[, trigger := ifelse(trigger > 0.5, 1, 0)])
+
+# Compute model outputs
+y <- apply(mat, 1, run_model)
+```
+
+The output distribution is plotted:
+```{r}
+ggplot(data.frame(y), aes(x = y)) +
+                  geom_histogram(bins = 30, fill = "steelblue", color = "black", alpha = 0.7) +
+                  theme_minimal() + labs(y = "", title = "Output Distribution of Sobol' G* Function under Triggers") +
+                  theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"))
+```
+
+The sensitivity indices are computed and then plotted:
+```{r}
+# Compute sensitivity indices
+ind <- sensobol::sobol_indices(Y = y, N = N, params = params, first = first, total = total, boot = TRUE, R = R)
+```
+
+```{r}
+plot(ind) + labs(title = "Sobol' G Function under trigger") + theme(legend.position = "right")
+```
+
+# Example 4: Use of triggers in GARCH modelling
+
+GARCH (Generalized AutoRegressive Conditional Heteroskedasticity) modelling is a statistical approach used to analyze and forecast volatility in time series data.
+
+A generic GARCH(m, s) model is defined as: 
+
+$$ \sigma_t^2 = \alpha_0 + \sum_{i=1}^{m} \alpha_i a_{t-i}^2 + \sum_{j=1}^{s} \beta_j \sigma_{t-j}^2 $$
+
+where:
+
+- $a_t = \sigma_t \epsilon_t$;
+
+- $\alpha_0 > 0, \alpha_i \geq 0, \beta_j \geq 0$;
+
+- $\sum_{i=1}^{max(m, s)} (\alpha_i + \beta_i) < 1$
+
+These are the _stability conditions_.
+
+These model can be extended to take into account volatility asymmetries, especially leverage effects, where negative shocks have a different impact on volatility than positive shocks of the same magnitude.
+
+The extensions are the **GJR-GARCH** and **T-GARCH** models.
+
+The GJR-GARCH model is defined as:
+
+$$ \sigma_t^2 = \alpha_0 + \sum_{i=1}^{m} \alpha_i a_{t-i}^2 + \sum_{j=1}^{s} \beta_j \sigma_{t-j}^2 + \sum_{k=1}^{s} \gamma_k a_{t-k}^2 I_{t-k} $$
+and the T-GARCH model is defined as:
+
+$$ \sigma_t^2 = \alpha_0 + \sum_{i=1}^{m} \alpha_i |a_{t-i}| + \sum_{j=1}^{s} \beta_j |\sigma_{t-j}| + \sum_{k=1}^{s} \gamma_k |a_{t-k}| I_{t-k} $$
+
+$I_{t-k}$ is an indicator function function that takes values 1 if the past residuals negative and equal to 0 if the past residual is non-negative.
+
+These models can be efficiently represented as:
+
+$$\sigma_t^2 = \alpha_0 + \sum_{i=1}^{m} \alpha_i |a_{t-i}|^c + \sum_{j=1}^{s} \beta_j |\sigma_{t-j}|^c + \sum_{k=1}^{s} \gamma_k |a_{t-k}|^c I_{t-k}$$
+c can take value 1 or 2, depending on the model:
+
+- when c = 2, the model represents the GJR-GARCH model,
+- when c = 1, the model represents the T-GARCH model.
+
+Hence, c can be considered as a global sensitivity analysis trigger that could help us in ...
+
+To make the example simple, we start by forecasting a single value in the future (the so-called "one-step ahead forecast") for the conditional variance of the stock returns, one for each distribution.
+
+
+
+## GJR-GARCH and T-GARCH volatility modelling: coding
+
+The feasible input space involves 7 parameters:
+
+- ARCH order (q): usually 0, 1 or 2 (two binary variables);
+- GARCH order (p): usually 0, 1 or 2 (two binary variables);
+
+- constant term $\alpha_0$, usually between 0 and 0.1 (continuous);
+- $\alpha_i$ coefficients, between 0 and 0.24999, to respect stability constraints (continuous);
+- $\beta_j$ coefficients,  between 0 and 0.24999, to respect stability constraints (continuous);
+- the innovation term, $\epsilon_t$, can be defined as different skewed and platykurtic distributions, the Student's t-distribution is chosen to capture "fat-tailedness", with a range from 1 to 30 degrees of freedom. Recall that $\text{dof} \rightarrow \infty$ converges to a normal distribution.
+
+the AR-MA orders, that govern the mean equation, fixed to are (0,0).
+
+To avoid over-complicating the code, we shorten the coefficient parameter space to 0.24999, so in the "worst-case" scenario the sum of the coefficients in GARCH(2,2) is less than 1, thus respecting the stability conditions.
+
+We use the Microsoft stock data from 2010 to August 2024.
+```{r warning=FALSE, include=FALSE, paged.print=TRUE}
+# Download Microsoft stock data
+getSymbols("MSFT", from = "2010-01-01", to = "2024-08-31")
+
+# Calculate returns
+returns <- diff(log(MSFT$MSFT.Close))
+returns <- returns[-1]  # Remove the first NA value
+```
+
+The model is specified...
+```{r}
+m <- 1
+s <-1
+
+spec <- ugarchspec(
+  variance.model = list(model = "tGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(1, 1), include.mean = TRUE),
+  distribution.model="std", fixed.pars=list(shape=3)  # Student's t distribution for better fit
+)
+```
+
+...and then fitted:
+```{r}
+fit <- ugarchfit(spec, returns)
+```
+
+```{r}
+show(fit)
+```
+
+
+$$\{\epsilon_t\} \sim iid(0,1)$$
+or
+
+$$\{\epsilon_t\} \sim t(5)$$
+## Sensitivity Analysis
+
+The parameters of our model under scrutiny and the SA (hyper)parameters are defined:
+```{r}
+# Define the parameters
+params <- c("ARCHorder", "GARCHorder", "ConstantTerm", "ARCHCoeff",
+            "GARCHCoeff", "studentT_dof", "TvsGJRGarchTrigger")
+params <- c("ARCHorder", "GARCHorder", "intercept_term", "ARCHCoeff",
+            "GARCHCoeff", "studentT_dof")
+N <- 2^13
+first <- "saltelli"
+total <- "jansen"
+```
+
+The design matrix is created with the `sensobol` package and the parameters uniformly distributed random samples are mapped to their respective intervals. Recall that some intervals must respect the stochastic processes behind the GARCH model.
+```{r}
+# create a design matrix with random sample
+mat <- as.data.frame(sobol_matrices(params = params, N = N, type = "R"))
+
+#Now each variable must be transformed to the appropriate type and mapped in their proper intervals.
+
+# create intervals and map discrete values of ARCH orders
+mat$ARCHorder <- as.factor(cut(mat$ARCHorder, breaks = c(-1, 0.33333, 0.66666, 1), labels = c(0, 1, 2), right = FALSE))
+
+# just for once, check if each order has the same frequency
+freq_table <- table(mat$ARCHCoeff)
+
+# create intervals and map discrete values of GARCH orders
+mat$GARCHorder <- as.factor(cut(mat$GARCHorder, breaks = c(-1, 0.33333, 0.66666, 1), labels = c(0, 1, 2), right = FALSE))
+
+# create intervals and map continuous values of ARCH/GARCH coefficients terms
+mat$ARCHCoeff <- mat$ARCHCoeff * 0.24999
+mat$GARCHCoeff <- mat$GARCHCoeff * 0.24999
+
+# Create intervals
+intervals <- seq(0, 1, by = 1/30)
+# Function to assign positional values
+assign_position <- function(x, intervals) {
+  interval_index <- findInterval(x, intervals, rightmost.closed = TRUE)
+  return(interval_index)
+}
+
+mat$studentT_dof <- as.factor(assign_position(mat$studentT_dof, intervals))
+
+# map the costant term interval
+mat$intercept_term <- mat$intercept_term * 0.1
+
+# Create the trigger
+# mat$TvsGJRGarchTrigger <- as.factor(cut(mat$TvsGJRGarchTrigger, breaks = c(-1, 0.5, 1), labels = c(0, 1), #                             right = FALSE))
+```
+
+Now the forecasting R function is defined. It involves the estimation of the GARCH model and the one-step ahead forecast at each matrix row. 
+
+```{r}
+
+# Define the function
+compute_forecast <- function(mat, returns, num_rows = nrow(mat)) {
+  # Pre-allocate a vector for forecasts
+  forecast_vector <- numeric(num_rows)
+  
+  # Loop over the specified number of rows
+  for (row in 1:num_rows) {
+    # Extract parameters from the row
+    arch_order <- mat[row, "ARCHorder"]
+    garch_order <- mat[row, "GARCHorder"]
+    intercept_term <- mat[row, "intercept_term"]
+    intercept_term <- 0.05
+    arch_coeff <- mat[row, "ARCHCoeff"]
+    arch_coeff <- 1
+    garch_coeff <- mat[row, "GARCHCoeff"]
+    garch_coeff <- 1
+    student_t_dof <- mat[row, "studentT_dof"]
+    
+    # Specify which GARCH to use
+    spec <- ugarchspec(
+      variance.model = list(model = "gjrGARCH",
+                            garchOrder = c(garch_order, arch_order)),
+      mean.model = list(armaOrder = c(0, 0), include.mean = TRUE),
+      distribution.model = "std",
+      start.pars = list(
+        mu = mean(returns),
+        omega = intercept_term,
+        alpha1 = arch_coeff,
+        beta1 = garch_coeff,
+        gamma1 = 0),
+      fixed.pars = list(shape = student_t_dof)
+    )
+    
+    # Estimate and fit the GARCH Model to the stock returns
+    fit <- try(ugarchfit(spec, returns, solver = "hybrid"), silent = TRUE)
+    
+    # One-step Ahead Forecast
+    if (!inherits(fit, "try-error")) {
+      forecast <- ugarchforecast(fit, n.ahead = 1)
+      forecast_vector[row] <- forecast@forecast$sigmaFor
+    } else {
+      forecast_vector[row] <- NA
+    }
+  }
+  
+  return(forecast_vector)
+}
+```
+
+Given function complexity, we run it on a small subset (10 rows) of the matrix to check if it works properly.
+```{r}
+start = Sys.time()
+compute_forecast(mat, returns, num_rows = 10)
+computation_time <- Sys.time() - start
+```
+
+on a (rough) average, the function takes...
+```{r}
+as.double(computation_time/10)
+```
+...seconds to run.
+
+An attempt to parallelize the computation of the forecast vector is made. For this purpose, the packages `foreach`, `parallel` and `doParallel` are used.
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+install_if_missing(c( "foreach", "parallel", "doParallel"))
+
+library(foreach)
+library(parallel)
+library(doParallel)
+```
+
+Before executing the parallelized nested loop, we order the computer to use 75% of the cores available in
+order to take advantage of parallel computing.
+```{r}
+n_cores <- makeCluster(round(detectCores() * 0.75))
+registerDoParallel(n_cores)
+```
+
+
+```{r}
+out <- foreach(i = 1:nrow(mat),
+               .packages = "rugarch",
+               .combine = c) %dopar% {
+                 compute_forecast(mat, returns, num_rows = 100)
+               }
+                
+```
+
+
+```{r}
+# Function to run GARCH model for a single row
+run_garch_model <- function(row) {
+  # Extract parameters from the row
+  arch_order <- as.integer(row["ARCHorder"])
+  garch_order <- as.integer(row["GARCHorder"])
+  constant_term <- row["ConstantTerm"]
+  arch_coeff <- row["ARCHCoeff"]
+  garch_coeff <- row["GARCHCoeff"]
+  student_t_dof <- row["studentT_dof"]
+
+  # Create GARCH specification
+  spec <- ugarchspec(
+    variance.model = list(model = ifelse(gjr_trigger, "gjrGARCH", "sGARCH"),
+                          garchOrder = c(garch_order, arch_order)),
+    mean.model = list(armaOrder = c(0, 0), include.mean = TRUE),
+    distribution.model = "std",
+    fixed.pars = list(
+      omega = constant_term,
+      alpha1 = arch_coeff,
+      beta1 = garch_coeff,
+      shape = student_t_dof
+    )
+  )
+
+  # Generate some random data (you might want to use your actual data here)
+  data <- rnorm(1000)
+
+  # Fit the model
+  fit <- try(ugarchfit(spec, data, solver = "hybrid"), silent = TRUE)
+
+  # Return some summary statistic or criterion (e.g., AIC)
+  if (class(fit) == "try-error") {
+    return(NA)
+  } else {
+    return(infocriteria(fit)["Akaike",])
+  }
+}
+
+# Apply the function to each row of the matrix
+results <- apply(mat, 1, run_garch_model)
+
+# Add results to the original matrix
+mat$GARCH_AIC <- results
+
+unique(mat$GARCH_AIC)
+```
+
+
+

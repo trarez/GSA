@@ -1,0 +1,33 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+install_if_missing <- function(packages) {
+  new_packages <- packages[!(packages %in% installed.packages()[,"Package"])]
+  if(length(new_packages)) install.packages(new_packages)
+  invisible(sapply(packages, library, character.only = TRUE))
+}
+
+install_if_missing(c())
+```
+
+Bayesian Analysis offers the most natural framework for describing uncertainty.
+
+The joint posterior density of the parameters $\alpha'$ and $V_a$ is given by:
+
+$$\text{pr}(\alpha', V_a|Y, M) \propto \text{pr}(Y|M, \alpha, V_a)\text{pr}(\alpha, V_a|M)$$
+
+$\text{pr}(Y|M, \alpha, V_a)$ is the likelihood function associated to the regression model $Y_t = X'_t + e_t$
+and the ARIMA model $\phi(B)y_t = \theta(B)a_t$.
+
+$\text{pr}(\alpha, V_a|M)$ is the prior distribution of the parameters of the regression model and the ARIMA model.
+
+Let $y_D$ represent the series obtained by the differencing operation $\delta(B)y_t = \delta(B)(Y_t-X'_t\beta)$ with covariance matrix $\Sigma_{yD} = V[y_D]$; the the likelihood function of the model is given by:
+
+$\text{pr}(Y|M, \alpha, V_a) = \text{pr}(y_D|M, \alpha, V_a) \propto |\Sigma_{y_D}|^{-1/2} \text{exp}\bigg(-\frac{1}{2}y'_D \sum_{y_D}^{-1}y_D\bigg)$
+
+Given a set of regressors, the Kalman recursions with suitable initial conditions offer the most convenient way to compute the likelihood function.
+
+
