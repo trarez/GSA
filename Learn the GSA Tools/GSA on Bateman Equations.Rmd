@@ -1,0 +1,217 @@
+---
+title: "Bateman Equation - Sensitivity Analysis"
+output: html_notebook
+---
+
+## Theory
+
+The Bateman equation is one example where sensitivity analysis can be performed. It is a mathematical model describing abundances and activities in a decay chain as a function of time, based on the decay rates (specific for every type of element) and initial abundances.
+
+The Bateman equation is characterized by the absence of feedbacks, hence making it and the sensitivity analysis easier to perform and assess.
+
+$$
+\begin{align}
+\frac{dN_1(t)}{dt} &= -\lambda_1 N_1(t) \\
+\frac{dN_i(t)}{dt} &= -\lambda_i N_i(t) + \lambda_{i-1} N_{i-1}(t) \\
+\frac{dN_k(t)}{dt} &= \lambda_{k-1} N_{k-1}(t)
+\end{align}
+$$
+
+$$
+N_n(t) = N_1(0) \times \left( \prod_{i=1}^{n-1} \lambda_i \right) \times \sum_{i=1}^{n} \frac{e^{-\lambda_i t}}{\prod_{\substack{j=1 \\ j \neq i}}^{n} (\lambda_j - \lambda_i)}
+$$
+
+## 2. Sensitivity Analysis and Indices
+
+We are interested in the first and total sensitivity indices.
+
+From our generic model:
+$$Y = f(X_1, X_2, \dots, X_k)$$
+
+and the variance decomposition formula:
+$$E_Xi (V_{X \sim i}(Y|X_i)) + V_{Xi}(E_{X \sim i}(Y|X_i)) = V(Y)$$
+
+we derive the first-order sensitivity index:
+$$S_i = \frac{V_{Xi}(E_{X \sim i}(Y|X_i))}{V(Y)}$$
+
+and the total-order sensitivity index:
+$$S_{Ti} = 1 - \frac{V(E(Y|X_{\sim i}))}{V(Y)} = \frac{E(V(Y|X_{\sim i}))}{V(Y)}$$
+
+If a model is additive:
+$$\sum_i V_{Xi} (E_{X \sim i}(Y|X_i)) = V(Y)$$
+
+## Coding
+
+The analyses will be performed with the `sensobol` package by Puy et al.(2022). The two most important R packages, `ggplot2` and `tidyverse`, are also used for data visualization and manipulation. `gridExtra` for plotting multiple graphs in a single plot.
+```{r message=TRUE, include=FALSE}
+library(ggplot2)
+library(sensobol)
+library(tidyverse)
+library(gridExtra)
+```
+
+It is always important to choose a random seed, in order to make the results reproducible. The chosen seed number completely arbitrary.
+```{r}
+set.seed(100)
+```
+
+The user-defined function of the Bateman master equation is defined as follows:
+```{r}
+bateman_equation <- function(N0, lambdas, t) {
+  n <- length(lambdas)
+  result <- 0
+  for (i in seq_len(n)) {
+    product <- 1
+    for (j in seq_len(n)) {
+      if (j != i) {
+        product <- product * (lambdas[j] - lambdas[i])
+      }
+    }
+    result <- result + exp(-lambdas[i] * t) / product
+  }
+  return(N0 * prod(lambdas[-n]) * result)
+}
+```
+
+With $\lambda = (0,35, 0.6, 0.8)$, the Bateman equation is plotted for $t = 100$ and an initial concentration of $N_1(0) = 1$.
+
+```{r}
+lambdas_vector <- c(0.35, 0.6, 0.8)
+example_result <- bateman_equation(1, lambdas_vector, 100)
+print(example_result)
+```
+The output returns the third nuclide concentration in the decay chain at time $t = 100$, given the initial concentration and decay constants. It is virtually equal to 0.
+
+We can also see this with a plot of the Bateman equation for the same parameters.
+
+```{r}
+bateman_plot <- function(N0, lambdas, t) {
+  n <- length(lambdas)
+  out <- matrix(0, nrow = t, ncol = n)
+  for (i in seq_len(t)) {
+    for (j in seq_len(n)) {
+      out[i, j] <- bateman_equation(N0, lambdas[1:j], i)
+    }
+  }
+  
+  # Convert matrix to dataframe for ggplot
+  df <- data.frame(time = rep(seq_len(t), n),
+                   value = as.vector(out),
+                   series = factor(rep(seq_len(n), each = t)))
+  
+  # Plot using ggplot2
+  ggplot(df, aes(x = time, y = value, color = series)) +
+    geom_line(linewidth = 1) +
+    labs(x = 't', y = 'N_k(t)', color = 'Series') +
+    theme_minimal()
+}
+```
+
+```{r}
+bateman_plot(1, lambdas_vector, 100)
+```
+
+
+```{r}
+model <- function(N0, lambdas, t = 1) {
+  n <- length(lambdas)
+  out <- numeric(n)  # Initialize a numeric vector to store the results
+  for (j in 1:n) {
+    out[j] <- bateman_equation(N0, lambdas[1:j], t)
+  }
+  return(out)
+}
+```
+
+
+### Sensitivity Analysis
+
+Now the sensitivity analysis is performed on the Bateman equation. The sensitivity analysis is performed using the Sobol' method, which is a variance-based method that decomposes the variance of the output into contributions from each input parameter and their interactions.
+
+Our goal is to compute the first and total sensitivity indices for a decay chain of 3, 5, and then 7 decay constants to compare the results. Obviously, in order to make consistent comparison, the sensitivity analysis parameters must be equal for each iteration.
+
+In particular, the lambdas are sampled from a $\mathcal{U} \sim [0, 1]$.
+
+The SA parameters are defined:
+```{r}
+N <- 2^12 # Number of samples 
+R <- 100 
+interval <- c(c(0.1, 0.99), c(0.1, 0.99), c(0.1, 0.99)) # Not used
+type <- "norm"; conf <- 0.50
+nameParams <- paste("λ", 1:length(lambdas), sep = "")
+```
+
+The design matrix is created, with each parameter (i.e., the lambdas, sampled from a uniform distribution, see `type = "R"`):
+```{r}
+design_matrix <- sobol_matrices(N = N, params = nameParams, type = "R")
+
+round(apply(round(design_matrix, 3), 2, mean), 4)
+```
+
+The output shows the mean of each lambda, which are close to 0.5, as expected.
+
+Now the Bateman equation is applied to each row, representing each experiment:
+```{r}
+# Initialize a numeric vector to store the results
+results_bateman <- numeric(nrow(design_matrix))
+
+# Loop through each row and apply the bateman_equation function
+for (x in 1:nrow(design_matrix)) {
+  results_bateman[x] <- bateman_equation(1, as.numeric(design_matrix[x, ]), t = 1)
+}
+
+ind <- sobol_indices(Y = results_bateman, N = N, params = nameParams, boot = TRUE, R = R, type = type, conf = conf)
+
+plot(ind)
+```
+The plot shows the indices for each lambda (chain). As expected, the $S_i$ is smaller than the $T_i$, being the total sensitivity index the sum of the first-order and all higher-order indices.
+
+The interval bands around the indices represent the confidence interval, which is set to 0.50 in this case. Try to increase it.
+
+The SA indices are now computed for 5 and 7 lambdas.
+
+### SA with 5 chains
+```{r}
+N <- 2^12; R <- 100
+interval <- c(c(0.1, 0.99), c(0.1, 0.99), c(0.1, 0.99)) # Not used
+type <- "norm"; conf <- 0.50
+nameParams <- paste("λ", 1:length(lambdas), sep = "")
+
+design_matrix <- sobol_matrices(N = N, params = nameParams, type = "R")
+
+# Initialize a numeric vector to store the results
+results_bateman <- numeric(nrow(design_matrix))
+
+# Loop through each row and apply the bateman_equation function
+for (x in 1:nrow(design_matrix)) {
+  results_bateman[x] <- bateman_equation(1, as.numeric(design_matrix[x, ]), t = 1)
+}
+
+ind <- sobol_indices(Y = results_bateman, N = N, params = nameParams, boot = TRUE, R = R, type = type, conf = conf)
+
+plot(ind)
+```
+
+### SA with 7 chains
+```{r}
+N <- 2^12; R <- 100
+interval <- c(c(0.1, 0.99), c(0.1, 0.99), c(0.1, 0.99)) # Not used
+type <- "norm"; conf <- 0.50
+nameParams <- paste("λ", 1:length(lambdas), sep = "")
+
+design_matrix <- sobol_matrices(N = N, params = nameParams, type = "R")
+
+# Initialize a numeric vector to store the results
+results_bateman <- numeric(nrow(design_matrix))
+
+# Loop through each row and apply the bateman_equation function
+for (x in 1:nrow(design_matrix)) {
+  results_bateman[x] <- bateman_equation(1, as.numeric(design_matrix[x, ]), t = 1)
+}
+
+ind <- sobol_indices(Y = results_bateman, N = N, params = nameParams, boot = TRUE, R = R, type = type, conf = conf)
+
+plot(ind)
+```
+
+The last chain has both Si and Ti equal to 0, meaning the decay already happens at the previous steps.

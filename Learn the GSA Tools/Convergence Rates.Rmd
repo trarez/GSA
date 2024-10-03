@@ -1,0 +1,60 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(sensobol)
+library(tidyverse)
+library(ggplot2)
+library(plotly)
+library(gridExtra)
+
+set.seed(100)
+```
+
+In this notebook, the `sensobol` package is analyzed in detail. 
+The computation of first-order and total-order variance-based sensitivity indices requires two elements:
+
+1. a sampling design, that means how the sample is distributed in the multidimensional space of the model parameter,
+
+2. estimators, formulas to compute the sensitivity indices.
+
+All the estimators are sample-based.
+
+
+```{r}
+params <- c("x", "y")
+N <- 2^8
+a <- plot(sobol_matrices(N = N, params = params, type = "QRN"), 
+     pch = 20)
+```
+
+```{r}
+params <- c("x", "y")
+N <- 2^8
+b <- plot(sobol_matrices(N = N, params = params, type = "R"), 
+     pch = 20)
+```
+```{r}
+params <- c("x", "y")
+N <- 1000
+
+# Create a function to generate the plot
+create_sobol_plot <- function(type) {
+  data <- as.data.frame(sobol_matrices(N = N, params = params, type = type))
+  ggplot(data, aes(x = x, y = y)) +
+    geom_point(size = 1) +
+    theme_minimal() +
+    ggtitle(paste(type)) +
+    coord_fixed(ratio = 1)  # This ensures square aspect ratio
+}
+
+# Create the plots
+a <- create_sobol_plot("QRN")
+c <- create_sobol_plot("LHS")
+
+# Arrange the plots side by side
+grid.arrange(a, c, ncol = 2)
+```
+

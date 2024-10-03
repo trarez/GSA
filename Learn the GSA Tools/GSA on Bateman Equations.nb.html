@@ -11,7 +11,7 @@
 
 
 
-<title>Use of Triggers for MOMP: a tutorial</title>
+<title>Bateman Equation - Sensitivity Analysis</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -1746,36 +1746,61 @@ display: none;
 
 
 
-<h1 class="title toc-ignore">Use of Triggers for MOMP: a tutorial</h1>
+<h1 class="title toc-ignore">Bateman Equation - Sensitivity
+Analysis</h1>
 
 </div>
 
 
 <!-- rnb-text-begin -->
-<p>As already known from the previous notebooks, <em>global sensitivity
-analysis</em> examines the model output sensitivity when varying all
-uncertain inputs <em>simultaneously</em> across their entire value
-range.</p>
-<p>An extension of GSA can be performed on sample assumptions made in
-the course of a specific analysis, simulating an analysis done by
-multiple teams/researchers tackling the same (unspecified) problem.</p>
-<p>A <em>robustification</em> is hence performed by varying assumptions
-so that an Uncertainty Analysis (UA) and Sensitivity Analysis (SA) can
-be performed on these variations. This is essentially what <em>Modelling
-of the Modelling Process</em> is.</p>
-<p>The MOMP can be performed in a Montecarlo framework, by defining
-random triggers that determine the model to be followed in each
-simulation. In this way, predictions are combined from these models
-while accounting simultaneously for the uncertainty associated with each
-model’s parameters. Random triggers can be then considered as source of
-added uncertainty.</p>
-<p>At each iteration combination of triggers, these are sampled randomly
-in an independent way, leading to a different identifiable model.</p>
-<div id="coding-setting-up-the-global-environment" class="section level2">
-<h2>Coding, setting up the global environment:</h2>
+<div id="theory" class="section level2">
+<h2>Theory</h2>
+<p>The Bateman equation is one example where sensitivity analysis can be
+performed. It is a mathematical model describing abundances and
+activities in a decay chain as a function of time, based on the decay
+rates (specific for every type of element) and initial abundances.</p>
+<p>The Bateman equation is characterized by the absence of feedbacks,
+hence making it and the sensitivity analysis easier to perform and
+assess.</p>
+<p><span class="math display">\[
+\begin{align}
+\frac{dN_1(t)}{dt} &amp;= -\lambda_1 N_1(t) \\
+\frac{dN_i(t)}{dt} &amp;= -\lambda_i N_i(t) + \lambda_{i-1} N_{i-1}(t)
+\\
+\frac{dN_k(t)}{dt} &amp;= \lambda_{k-1} N_{k-1}(t)
+\end{align}
+\]</span></p>
+<p><span class="math display">\[
+N_n(t) = N_1(0) \times \left( \prod_{i=1}^{n-1} \lambda_i \right) \times
+\sum_{i=1}^{n} \frac{e^{-\lambda_i t}}{\prod_{\substack{j=1 \\ j \neq
+i}}^{n} (\lambda_j - \lambda_i)}
+\]</span></p>
+</div>
+<div id="sensitivity-analysis-and-indices" class="section level2">
+<h2>2. Sensitivity Analysis and Indices</h2>
+<p>We are interested in the first and total sensitivity indices.</p>
+<p>From our generic model: <span class="math display">\[Y = f(X_1, X_2,
+\dots, X_k)\]</span></p>
+<p>and the variance decomposition formula: <span class="math display">\[E_Xi (V_{X \sim i}(Y|X_i)) + V_{Xi}(E_{X \sim
+i}(Y|X_i)) = V(Y)\]</span></p>
+<p>we derive the first-order sensitivity index: <span class="math display">\[S_i = \frac{V_{Xi}(E_{X \sim
+i}(Y|X_i))}{V(Y)}\]</span></p>
+<p>and the total-order sensitivity index: <span class="math display">\[S_{Ti} = 1 - \frac{V(E(Y|X_{\sim i}))}{V(Y)} =
+\frac{E(V(Y|X_{\sim i}))}{V(Y)}\]</span></p>
+<p>If a model is additive: <span class="math display">\[\sum_i V_{Xi}
+(E_{X \sim i}(Y|X_i)) = V(Y)\]</span></p>
+</div>
+<div id="coding" class="section level2">
+<h2>Coding</h2>
+<p>The analyses will be performed with the <code>sensobol</code> package
+by Puy et al.(2022). The two most important R packages,
+<code>ggplot2</code> and <code>tidyverse</code>, are also used for data
+visualization and manipulation. <code>gridExtra</code> for plotting
+multiple graphs in a single plot.</p>
 <!-- rnb-text-end -->
 <!-- rnb-text-begin -->
-<p>Ensure reproducibility by setting a seed:</p>
+<p>It is always important to choose a random seed, in order to make the
+results reproducible. The chosen seed number completely arbitrary.</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
 <!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuc2V0LnNlZWQoMTAwKVxuYGBgIn0= -->
@@ -1783,899 +1808,233 @@ in an independent way, leading to a different identifiable model.</p>
 <!-- rnb-source-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
-<p>Define the common parameters of interest for our sensitivity
-analysis:</p>
+<p>The user-defined function of the Bateman master equation is defined
+as follows:</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuTiA8LSAyXjExOyAjIE51bWJlciBvZiBzYW1wbGVzXG5cbmZpcnN0IDwtIFwic2FsdGVsbGlcIlxudG90YWwgPC0gXCJqYW5zZW5cIlxuIyBTcGVjaWZ5IHRoZSB0eXBlIG9mIHNlbnNpdGl2aXR5IGluZGljZXMgZm9yIHRoZSBmdW5jdGlvbiBcInNvYm9sX2luZGljZXNcIi5cbiMgXCJzYWx0ZWxsaVwiIGZvciBmaXJzdC1vcmRlciBlZmZlY3RzIGFuZCBcImphbnNlblwiIGZvciB0b3RhbC1vcmRlciBlZmZlY3RzIGFyZSB0aGUgZGVmYXVsdCBjaG9pY2VzIGZvciB0aGUgc2Vuc29ib2wgZnVuY3Rpb24uXG5cblI8LTEwXjMgIyBOdW1iZXIgb2YgcmVwbGljYXRpb25zIGJvb3RzdHJhcFxuYGBgIn0= -->
-<pre class="r"><code>N &lt;- 2^11; # Number of samples
-
-first &lt;- &quot;saltelli&quot;
-total &lt;- &quot;jansen&quot;
-# Specify the type of sensitivity indices for the function &quot;sobol_indices&quot;.
-# &quot;saltelli&quot; for first-order effects and &quot;jansen&quot; for total-order effects are the default choices for the sensobol function.
-
-R&lt;-10^3 # Number of replications bootstrap</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p>The first-order sensitivity index <span class="math inline">\(S_i\)</span> “<em>saltelli</em>” is calculated
-as:</p>
-<p><span class="math display">\[\frac{\frac{1}{N} \sum_{v=1}^{N}
-f(\mathbf{B})_v \left[ f\left( \mathbf{A}_{\mathbf{B}}^{(i)} \right)_v -
-f(\mathbf{A})_v \right]}{V(y)}\]</span></p>
-<p>The total-order sensitivity index <span class="math inline">\(T_i\)</span> “<em>jansen</em>” is calculated
-as:</p>
-<p><span class="math display">\[\frac{\frac{1}{2N} \sum_{v=1}^{N} \left[
-f(\mathbf{A})_v - f\left( \mathbf{A}_{\mathbf{B}}^{(i)} \right)_v
-\right]^2}{V(y)}\]</span> Both formulas come from <a href="https://www.sciencedirect.com/science/article/pii/S0010465509003087">Saltelli
-et al. (2010)</a>.</p>
-<hr />
-</div>
-<div id="example-1-use-of-triggers-in-a-sobol-g-function-absolute-values-vs-no-absolute-values" class="section level1">
-<h1>Example 1: Use of triggers in a Sobol’ G Function, absolute values
-vs no absolute values</h1>
-<p>To proceed step-by-step, a simple example of MOMP using triggers on
-the Sobol Function is performed, with a slight modification. As we
-already know from the previous notebook, the Sobol’ G Function is a
-benchmark function for global sensitivity analysis. The function is
-defined as follows:</p>
-<p><span class="math display">\[ Y = \prod_{i = 1}^k \frac{|4X_i - 2| +
-a_i}{1 + a_i} \\ k = 8 \\ X_i \sim U[0, 1] \\ a = (0, 1, 4.5, 9, 99, 99,
-99, 99) \]</span> … but here with a caveat. Let’s imagine, in this
-context, that the researcher does not know the correct specification, it
-is unsure whether the term <span class="math inline">\(4X_i - 2\)</span>
-is in absolute values or not. Trigger permits to explore the uncertainty
-for both cases simultaneously. Defined a binary choice, at each
-iteration one of the two model will be randomly selected between the two
-options.</p>
-<p>Write in code the Sobol’ G Function with the two possible
-specifications:</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuc29ib2xfRnVuXzAgPC0gZnVuY3Rpb24oWCwgdmVjdG9yKSB7XG4gICMgTW9kZWwvZnVuY3Rpb24gd2l0aCBhYnNvbHV0ZSB2YWx1ZXNcbiAgeSA8LSAxXG4gIFxuICBmb3IgKGogaW4gMTpsZW5ndGgodmVjdG9yKSkge1xuICAgIHkgPC0geSAqIChhYnMoNCAqIFhbLCBqXSAtIDIpICsgdmVjdG9yW2pdKS8oMSArIHZlY3RvcltqXSlcbiAgfVxuICByZXR1cm4oeSlcbn1cblxuc29ib2xfRnVuXzEgPC0gZnVuY3Rpb24oWCwgdmVjdG9yKSB7XG4gICMgTW9kZWwvZnVuY3Rpb24gd2l0aG91dCBhYnNvbHV0ZSB2YWx1ZXNcbiAgeSA8LSAxXG4gIFxuICBmb3IgKGogaW4gMTpsZW5ndGgodmVjdG9yKSkge1xuICAgIHkgPC0geSAqICg0ICogWFssIGpdIC0gMiArIHZlY3RvcltqXSkvKDEgKyB2ZWN0b3Jbal0pXG4gIH1cbiAgcmV0dXJuKHkpXG59XG5gYGAifQ== -->
-<pre class="r"><code>sobol_Fun_0 &lt;- function(X, vector) {
-  # Model/function with absolute values
-  y &lt;- 1
-  
-  for (j in 1:length(vector)) {
-    y &lt;- y * (abs(4 * X[, j] - 2) + vector[j])/(1 + vector[j])
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuYmF0ZW1hbl9lcXVhdGlvbiA8LSBmdW5jdGlvbihOMCwgbGFtYmRhcywgdCkge1xuICBuIDwtIGxlbmd0aChsYW1iZGFzKVxuICByZXN1bHQgPC0gMFxuICBmb3IgKGkgaW4gc2VxX2xlbihuKSkge1xuICAgIHByb2R1Y3QgPC0gMVxuICAgIGZvciAoaiBpbiBzZXFfbGVuKG4pKSB7XG4gICAgICBpZiAoaiAhPSBpKSB7XG4gICAgICAgIHByb2R1Y3QgPC0gcHJvZHVjdCAqIChsYW1iZGFzW2pdIC0gbGFtYmRhc1tpXSlcbiAgICAgIH1cbiAgICB9XG4gICAgcmVzdWx0IDwtIHJlc3VsdCArIGV4cCgtbGFtYmRhc1tpXSAqIHQpIC8gcHJvZHVjdFxuICB9XG4gIHJldHVybihOMCAqIHByb2QobGFtYmRhc1stbl0pICogcmVzdWx0KVxufVxuYGBgIn0= -->
+<pre class="r"><code>bateman_equation &lt;- function(N0, lambdas, t) {
+  n &lt;- length(lambdas)
+  result &lt;- 0
+  for (i in seq_len(n)) {
+    product &lt;- 1
+    for (j in seq_len(n)) {
+      if (j != i) {
+        product &lt;- product * (lambdas[j] - lambdas[i])
+      }
+    }
+    result &lt;- result + exp(-lambdas[i] * t) / product
   }
-  return(y)
-}
-
-sobol_Fun_1 &lt;- function(X, vector) {
-  # Model/function without absolute values
-  y &lt;- 1
-  
-  for (j in 1:length(vector)) {
-    y &lt;- y * (4 * X[, j] - 2 + vector[j])/(1 + vector[j])
-  }
-  return(y)
+  return(N0 * prod(lambdas[-n]) * result)
 }</code></pre>
 <!-- rnb-source-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
-<p>The specific parameters of the Sobol’ G Function are then defined.
-Again, the <span class="math inline">\(a_i\)</span> values are
-arbitrary; the higher they are, the less sensible the output is to the
-specific input.</p>
+<p>With <span class="math inline">\(\lambda = (0,35, 0.6, 0.8)\)</span>,
+the Bateman equation is plotted for <span class="math inline">\(t =
+100\)</span> and an initial concentration of <span class="math inline">\(N_1(0) = 1\)</span>.</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuYV92ZWN0b3IgPC0gYygwLCAxLCA0LjUsIDksIDk5LCA5OSwgOTksIDk5KVxuXG5rIDwtIGxlbmd0aChhX3ZlY3RvcikgI251bWJlciBvZiBwYXJhbWV0ZXJzXG5wYXJhbXMgPC0gYyhwYXN0ZShcInhcIiwgMTprLCBzZXAgPSBcIlwiKSwgXCJ0cmlnZ2VyXCIpICMgUGFyYW1ldGVycyBuYW1lcywgd2l0aCB0aGUgdHJpZ2dlclxuYGBgIn0= -->
-<pre class="r"><code>a_vector &lt;- c(0, 1, 4.5, 9, 99, 99, 99, 99)
-
-k &lt;- length(a_vector) #number of parameters
-params &lt;- c(paste(&quot;x&quot;, 1:k, sep = &quot;&quot;), &quot;trigger&quot;) # Parameters names, with the trigger</code></pre>
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxubGFtYmRhc192ZWN0b3IgPC0gYygwLjM1LCAwLjYsIDAuOClcbmV4YW1wbGVfcmVzdWx0IDwtIGJhdGVtYW5fZXF1YXRpb24oMSwgbGFtYmRhc192ZWN0b3IsIDEwMClcbnByaW50KGV4YW1wbGVfcmVzdWx0KVxuYGBgIn0= -->
+<pre class="r"><code>lambdas_vector &lt;- c(0.35, 0.6, 0.8)
+example_result &lt;- bateman_equation(1, lambdas_vector, 100)
+print(example_result)</code></pre>
 <!-- rnb-source-end -->
+<!-- rnb-output-begin eyJkYXRhIjoiWzFdIDEuMTc2OTU1ZS0xNVxuIn0= -->
+<pre><code>[1] 1.176955e-15</code></pre>
+<!-- rnb-output-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
-<p>A specific function is created in order to be applied on each row of
-the design matrix. The two different Sobol’ G Functions are then run
-according to the trigger value:</p>
+<p>The output returns the third nuclide concentration in the decay chain
+at time <span class="math inline">\(t = 100\)</span>, given the initial
+concentration and decay constants. It is virtually equal to 0.</p>
+<p>We can also see this with a plot of the Bateman equation for the same
+parameters.</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxucnVuX21vZGVsIDwtIGZ1bmN0aW9uKFgpIHtcbiAgdHJpZ2dlciA8LSBYW1widHJpZ2dlclwiXVxuICBYX2lucHV0IDwtIFhbIW5hbWVzKFgpICVpbiUgXCJ0cmlnZ2VyXCJdICAjIFNlbGVjdCBhbGwgY29sdW1ucyBleGNlcHQgXCJ0cmlnZ2VyXCJcbiAgXG4gIGlmICh0cmlnZ2VyID09IDApIHtcbiAgICByZXR1cm4oc29ib2xfRnVuXzAobWF0cml4KFhfaW5wdXQsIG5yb3c9MSksIGFfdmVjdG9yKSlcbiAgfSBlbHNlIHtcbiAgICByZXR1cm4oc29ib2xfRnVuXzEobWF0cml4KFhfaW5wdXQsIG5yb3c9MSksIGFfdmVjdG9yKSlcbiAgfVxufVxuYGBgIn0= -->
-<pre class="r"><code>run_model &lt;- function(X) {
-  trigger &lt;- X[&quot;trigger&quot;]
-  X_input &lt;- X[!names(X) %in% &quot;trigger&quot;]  # Select all columns except &quot;trigger&quot;
-  
-  if (trigger == 0) {
-    return(sobol_Fun_0(matrix(X_input, nrow=1), a_vector))
-  } else {
-    return(sobol_Fun_1(matrix(X_input, nrow=1), a_vector))
-  }
-}</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p>The sample matrix is defined and the columns are appropriately
-transformed. In our case, we just need to discretize the “trigger”
-variable.</p>
-<ul>
-<li>** 0: Sobol’ G Function with absolute values **</li>
-<li>** 1: Sobol’ G Function without absolute values **</li>
-</ul>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxubWF0IDwtIGRhdGEudGFibGUoc29ib2xfbWF0cmljZXMocGFyYW1zID0gcGFyYW1zLCBOID0gTiwgdHlwZSA9IFwiUlwiKSlcblxuIyBUcmFuc2Zvcm0gdGhlIHRyaWdnZXIgdmFyaWFibGUgdG8gYmluYXJ5XG5tYXRbLCB0cmlnZ2VyIDo9IGlmZWxzZSh0cmlnZ2VyID4gMC41LCAxLCAwKV1cblxuIyBKdXN0IHRvIG1ha2Ugc3VyZSwgZ2l2ZW4gdGhhdCAndHlwZSA9IFwiUlwiICcgcHJvdmlkZXMgcmFuZG9tIHVuaWZvcm1bMCwxXSB2YWx1ZXMgZm9yIGVhY2ggY29sdW1uIGFuZCB0aGUgdHJpZ2dlciBzcGxpdCBpcyBkZWZpbmVkIGF0IGl0cyBtZWRpYW4gdmFsdWUsIHdlIGNhbiBjaGVjayB0aGUgcGVyY2VudGFnZSBvZiAxJ3MuXG5cbmNhdChcIlRoZSByYXRpbyBvZiAxJ3MgKGFjdGl2ZSB0cmlnZ2VycykgaXNcIiwgc3VtKG1hdFssIHRyaWdnZXJdKS9ucm93KG1hdCkpICMgU2hvdWxkIGJlIGFyb3VuZCAwLjVcbmBgYCJ9 -->
-<pre class="r"><code>mat &lt;- data.table(sobol_matrices(params = params, N = N, type = &quot;R&quot;))
-
-# Transform the trigger variable to binary
-mat[, trigger := ifelse(trigger &gt; 0.5, 1, 0)]
-
-# Just to make sure, given that &#39;type = &quot;R&quot; &#39; provides random uniform[0,1] values for each column and the trigger split is defined at its median value, we can check the percentage of 1&#39;s.
-
-cat(&quot;The ratio of 1&#39;s (active triggers) is&quot;, sum(mat[, trigger])/nrow(mat)) # Should be around 0.5</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p>The outputs are computed and their distribution (<em>uncertainty
-analysis</em>) is computed:</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuIyBDb21wdXRlIG1vZGVsIG91dHB1dHNcbnkgPC0gYXBwbHkobWF0LCAxLCBydW5fbW9kZWwpXG5cbiMgUGxvdCB0aGUgZGlzdHJpYnV0aW9uIG9mIHRoZSBvdXRwdXQgd2l0aCBzZW5zb2JvbCBmdW5jdGlvblxucGxvdF91bmNlcnRhaW50eSh5LCBOID0gTikgKyBsYWJzKHRpdGxlID0gXCJPdXRwdXQgRGlzdHJpYnV0aW9uIG9mIFNvYm9sJyBHIEZ1bmN0aW9uIHVuZGVyIHRyaWdnZXJcIilcbmBgYCJ9 -->
-<pre class="r"><code># Compute model outputs
-y &lt;- apply(mat, 1, run_model)
-
-# Plot the distribution of the output with sensobol function
-plot_uncertainty(y, N = N) + labs(title = &quot;Output Distribution of Sobol&#39; G Function under trigger&quot;)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p>The same plot, but with improved visualizations:</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuaW1wcm92ZWRTb2JvbFRyaWdnVUEgPC0gZ2dwbG90KGRhdGEuZnJhbWUoeSksIGFlcyh4ID0geSkpICtcbiAgICAgICAgICAgICAgICAgICAgICAgIGdlb21faGlzdG9ncmFtKGJpbnMgPSAzMCwgZmlsbCA9IFwic3RlZWxibHVlXCIsIGNvbG9yID0gXCJibGFja1wiLCBhbHBoYSA9IDAuNykgK1xuICAgICAgICAgICAgICAgICAgICAgICAgdGhlbWVfbWluaW1hbCgpICsgbGFicyh5ID0gXCJcIikgKyBcbiAgICAgICAgICAgICAgICAgICAgICAgIHRoZW1lKHBsb3QudGl0bGUgPSBlbGVtZW50X3RleHQoaGp1c3QgPSAwLjUsIHNpemUgPSAxNiwgZmFjZSA9IFwiYm9sZFwiKSxcbiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgYXhpcy50aXRsZSA9IGVsZW1lbnRfdGV4dChzaXplID0gMTIpLFxuICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBheGlzLnRleHQgPSBlbGVtZW50X3RleHQoc2l6ZSA9IDEwKSlcblxuaW1wcm92ZWRTb2JvbFRyaWdnVUEgKyBsYWJzKHRpdGxlID0gXCJPdXRwdXQgRGlzdHJpYnV0aW9uIG9mIFRyaWdnZXJlZCBTb2JvbCcgRyBGdW5jdGlvbnNcIixcbiAgICAgICAgICAgICAgICAgICAgICAgeCA9IFwiWVwiLCB5ID0gXCJcIilcbmBgYCJ9 -->
-<pre class="r"><code>improvedSobolTriggUA &lt;- ggplot(data.frame(y), aes(x = y)) +
-                        geom_histogram(bins = 30, fill = &quot;steelblue&quot;, color = &quot;black&quot;, alpha = 0.7) +
-                        theme_minimal() + labs(y = &quot;&quot;) + 
-                        theme(plot.title = element_text(hjust = 0.5, size = 16, face = &quot;bold&quot;),
-                                axis.title = element_text(size = 12),
-                                axis.text = element_text(size = 10))
-
-improvedSobolTriggUA + labs(title = &quot;Output Distribution of Triggered Sobol&#39; G Functions&quot;,
-                       x = &quot;Y&quot;, y = &quot;&quot;)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p>The sensitivity indices are computed and then plotted, again with the
-<code>sensobol</code> package:</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuIyBDb21wdXRlIHNlbnNpdGl2aXR5IGluZGljZXNcbmluZCA8LSBzZW5zb2JvbDo6c29ib2xfaW5kaWNlcyhZID0geSwgTiA9IE4sIHBhcmFtcyA9IHBhcmFtcywgZmlyc3QgPSBmaXJzdCwgdG90YWwgPSB0b3RhbCwgYm9vdCA9IFRSVUUsIFIgPSBSKVxuYGBgIn0= -->
-<pre class="r"><code># Compute sensitivity indices
-ind &lt;- sensobol::sobol_indices(Y = y, N = N, params = params, first = first, total = total, boot = TRUE, R = R)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p>A table is displayed with all the relevant calculated measures:</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuaW5kXG5gYGAifQ== -->
-<pre class="r"><code>ind</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p>To improve the table visualization, we filter by <code>Si</code> and
-<code>Ti</code> and set the number of decimal digits in each numerical
-column to 5:</p>
-<ul>
-<li>First-order Si:</li>
-</ul>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuYXMuZGF0YS5mcmFtZShpbmRbMV0pICU+JSBcbiAgICBtdXRhdGUoYWNyb3NzKDE6NSwgfnJvdW5kKC4sIDUpKSkgJT4lXG4gICAgZmlsdGVyKHJlc3VsdHMuc2Vuc2l0aXZpdHkgPT0gXCJTaVwiKVxuYGBgIn0= -->
-<pre class="r"><code>as.data.frame(ind[1]) %&gt;% 
-    mutate(across(1:5, ~round(., 5))) %&gt;%
-    filter(results.sensitivity == &quot;Si&quot;)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<ul>
-<li>Total-order Ti:</li>
-</ul>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuYXMuZGF0YS5mcmFtZShpbmRbMV0pICU+JSBcbiAgICBtdXRhdGUoYWNyb3NzKDE6NSwgfnJvdW5kKC4sIDUpKSkgJT4lXG4gICAgZmlsdGVyKHJlc3VsdHMuc2Vuc2l0aXZpdHkgPT0gXCJUaVwiKVxuYGBgIn0= -->
-<pre class="r"><code>as.data.frame(ind[1]) %&gt;% 
-    mutate(across(1:5, ~round(., 5))) %&gt;%
-    filter(results.sensitivity == &quot;Ti&quot;)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxucGxvdChpbmQpICsgbGFicyh0aXRsZSA9IFwiU29ib2wnIEcgRnVuY3Rpb24gdW5kZXIgdHJpZ2dlclwiKSArIHRoZW1lKGxlZ2VuZC5wb3NpdGlvbiA9IFwicmlnaHRcIilcbmBgYCJ9 -->
-<pre class="r"><code>plot(ind) + labs(title = &quot;Sobol&#39; G Function under trigger&quot;) + theme(legend.position = &quot;right&quot;)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p>This is the best way to visualize and assess the results, in this
-case with the use of triggers.</p>
-<p>The trigger has the most important role in defining the output. This
-is suggested - recalling the UA - by the fact that the output domain the
-output domain extends into the negative range.</p>
-<p>We can compare these indices with the original Sobol G’ Function
-indices.</p>
-<p>Comparison: Single Original Sobol’ G Function vs Triggered</p>
-<p>Create the same design matrix, without the trigger columns, and
-compute the results:</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxucGFyYW1zIDwtIHBhc3RlKFwieFwiLCAxOmssIHNlcCA9IFwiXCIpICMgcmVtZW1iZXIgayBpcyB0aGUgbGVuZ3RoIG9mIGFfdmVjdG9yXG5cbm1hdDEgPC0gZGF0YS50YWJsZShzb2JvbF9tYXRyaWNlcyhwYXJhbXMgPSBwYXJhbXMsIE4gPSBOLCB0eXBlID0gXCJSXCIpKVxueTEgPC0gc29ib2xfRnVuXzAoYXMubWF0cml4KG1hdDEpLCBhX3ZlY3RvcilcbmluZDEgPC0gc29ib2xfaW5kaWNlcyhZID0geTEsIE4gPSBOLCBwYXJhbXMgPSBwYXJhbXMsIGZpcnN0ID0gZmlyc3QsIHRvdGFsID0gdG90YWwsIGJvb3QgPSBUUlVFLCBSID0gUilcblxuIyBEZWZpbmUgdGhlIGltcHJvdmVkIHVuY2VydGFpbnR5IHBsb3Qgd2l0aG91dCBydW5uaW5nIGl0OlxuXG5pbXByb3ZlZFNvYm9sVUEgPC0gZ2dwbG90KGRhdGEuZnJhbWUoeTEpLCBhZXMoeCA9IHkxKSkgK1xuICAgICAgICAgICAgICAgICAgZ2VvbV9oaXN0b2dyYW0oYmlucyA9IDMwLCBmaWxsID0gXCJzdGVlbGJsdWVcIiwgY29sb3IgPSBcImJsYWNrXCIsIGFscGhhID0gMC43KSArXG4gICAgICAgICAgICAgICAgICB0aGVtZV9taW5pbWFsKCkgKyBsYWJzKHkgPSBcIlwiKSArIFxuICAgICAgICAgICAgICAgICAgdGhlbWUocGxvdC50aXRsZSA9IGVsZW1lbnRfdGV4dChoanVzdCA9IDAuNSwgc2l6ZSA9IDE2LCBmYWNlID0gXCJib2xkXCIpLFxuICAgICAgICAgICAgICAgICAgICAgICAgYXhpcy50aXRsZSA9IGVsZW1lbnRfdGV4dChzaXplID0gMTIpLFxuICAgICAgICAgICAgICAgICAgICAgICAgYXhpcy50ZXh0ID0gZWxlbWVudF90ZXh0KHNpemUgPSAxMClcbiAgICAgICAgICAgICAgICAgIClcbmBgYCJ9 -->
-<pre class="r"><code>params &lt;- paste(&quot;x&quot;, 1:k, sep = &quot;&quot;) # remember k is the length of a_vector
-
-mat1 &lt;- data.table(sobol_matrices(params = params, N = N, type = &quot;R&quot;))
-y1 &lt;- sobol_Fun_0(as.matrix(mat1), a_vector)
-ind1 &lt;- sobol_indices(Y = y1, N = N, params = params, first = first, total = total, boot = TRUE, R = R)
-
-# Define the improved uncertainty plot without running it:
-
-improvedSobolUA &lt;- ggplot(data.frame(y1), aes(x = y1)) +
-                  geom_histogram(bins = 30, fill = &quot;steelblue&quot;, color = &quot;black&quot;, alpha = 0.7) +
-                  theme_minimal() + labs(y = &quot;&quot;) + 
-                  theme(plot.title = element_text(hjust = 0.5, size = 16, face = &quot;bold&quot;),
-                        axis.title = element_text(size = 12),
-                        axis.text = element_text(size = 10)
-                  )</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p>The uncertainty analysis for the original Sobol G’ Function is
-performed, and compared with the triggered one:</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuIyBEZWZpbmUgbXVsdGlwbGUgcGxvdHRpbmc6IDEgcm93IDIgY29sdW1uc1xuZ3JpZC5hcnJhbmdlKGltcHJvdmVkU29ib2xVQSArIGxhYnModGl0bGUgPSBcIlVBIE9yaWdpbmFsIFNvYm9sJyBHXCIpICxcbiAgICAgICAgICAgICBpbXByb3ZlZFNvYm9sVHJpZ2dVQSArIGxhYnModGl0bGUgPSBcIlVBIFRyaWdnZXJlZCBTb2JvbCcgR1wiKSxcbiAgICAgICAgICAgICBucm93ID0gMSlcbmBgYCJ9 -->
-<pre class="r"><code># Define multiple plotting: 1 row 2 columns
-grid.arrange(improvedSobolUA + labs(title = &quot;UA Original Sobol&#39; G&quot;) ,
-             improvedSobolTriggUA + labs(title = &quot;UA Triggered Sobol&#39; G&quot;),
-             nrow = 1)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p>The output distribution is, in the triggered case, more spread out as
-expected. This is because it involves negative values in the output
-domain.</p>
-<p>The sensitivity indices are then compared:</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuZ3JpZC5hcnJhbmdlKHBsb3QoaW5kMSkgKyBsYWJzKHRpdGxlID0gXCJHU0EgT3JpZ2luYWwgU29ib2wnIEdcIikgKyB0aGVtZShsZWdlbmQucG9zaXRpb24gPSBcIm5vbmVcIiksXG4gICAgICAgICAgICAgcGxvdChpbmQpICsgbGFicyh0aXRsZSA9IFwiR1NBIFRyaWdnZXJlZCBTb2JvbCcgR1wiKSArIHRoZW1lKGxlZ2VuZC5wb3NpdGlvbiA9IFwibm9uZVwiKSxcbiAgICAgICAgICAgICBucm93ID0gMSlcbiAgICAgICAgICAgICBcbmBgYCJ9 -->
-<pre class="r"><code>grid.arrange(plot(ind1) + labs(title = &quot;GSA Original Sobol&#39; G&quot;) + theme(legend.position = &quot;none&quot;),
-             plot(ind) + labs(title = &quot;GSA Triggered Sobol&#39; G&quot;) + theme(legend.position = &quot;none&quot;),
-             nrow = 1)
-             </code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-</div>
-<div id="example-2-use-of-triggers-with-a-simple-modified-sobol-g-function" class="section level1">
-<h1>Example 2: Use of triggers with a simple modified Sobol’ G
-Function</h1>
-<p><span class="math display">\[ Y = \prod_{i = 1}^k \frac{|4X_i - 2| +
-1.1 \cdot a_i}{1 + a_i} \\ k = 8 \\ X_i \sim U[0, 1] \\ a = (0, 1, 4.5,
-9, 99, 99, 99, 99) \]</span></p>
-<p>Another example is shown. The trigger is now used to see how the
-output is affected by the choice of the model. The trigger is defined as
-before, with a binary choice between the two models.</p>
-<p>Define the parameters of interest for our sensitivity analysis:</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuYV92ZWN0b3IgPC0gYygwLCAxLCA0LjUsIDksIDk5LCA5OSwgOTksIDk5KVxuXG5OIDwtIDJeMTE7ICMgTnVtYmVyIG9mIHNhbXBsZXNcbmsgPC0gbGVuZ3RoKGFfdmVjdG9yKSAjbnVtYmVyIG9mIHBhcmFtZXRlcnNcbnBhcmFtcyA8LSBjKHBhc3RlKFwieFwiLCAxOmssIHNlcCA9IFwiXCIpLCBcInRyaWdnZXJcIikgIyBQYXJhbWV0ZXJzIG5hbWVzLCB3aXRoIHRoZSB0cmlnZ2VyXG5cbmZpcnN0IDwtIFwic2FsdGVsbGlcIlxudG90YWwgPC0gXCJqYW5zZW5cIlxuIyBTcGVjaWZ5IHRoZSB0eXBlIG9mIHNlbnNpdGl2aXR5IGluZGljZXMgZm9yIHRoZSBmdW5jdGlvbiBcInNvYm9sX2luZGljZXNcIi5cbiMgXCJzYWx0ZWxsaVwiIGZvciBmaXJzdC1vcmRlciBlZmZlY3RzIGFuZCBcImphbnNlblwiIGZvciB0b3RhbC1vcmRlciBlZmZlY3RzIGFyZSB0aGUgZGVmYXVsdCBjaG9pY2VzIGZvciB0aGUgc2Vuc29ib2wgZnVuY3Rpb24uXG5cblxuUjwtMTBeMyAjIE51bWJlciBvZiByZXBsaWNhdGlvbnMgYm9vdHN0cmFwXG5gYGAifQ== -->
-<pre class="r"><code>a_vector &lt;- c(0, 1, 4.5, 9, 99, 99, 99, 99)
-
-N &lt;- 2^11; # Number of samples
-k &lt;- length(a_vector) #number of parameters
-params &lt;- c(paste(&quot;x&quot;, 1:k, sep = &quot;&quot;), &quot;trigger&quot;) # Parameters names, with the trigger
-
-first &lt;- &quot;saltelli&quot;
-total &lt;- &quot;jansen&quot;
-# Specify the type of sensitivity indices for the function &quot;sobol_indices&quot;.
-# &quot;saltelli&quot; for first-order effects and &quot;jansen&quot; for total-order effects are the default choices for the sensobol function.
-
-
-R&lt;-10^3 # Number of replications bootstrap</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p>Define the functions:</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuc29ib2xfRnVuXzAgPC0gZnVuY3Rpb24oWCwgdmVjdG9yKSB7XG4gICMgT3JpZ2luYWwgU29ib2wnIEcgRnVuY3Rpb25cbiAgeSA8LSAxXG4gIFxuICBmb3IgKGogaW4gMTpsZW5ndGgodmVjdG9yKSkge1xuICAgIHkgPC0geSAqIChhYnMoNCAqIFhbLCBqXSAtIDIpICsgdmVjdG9yW2pdKS8oMSArIHZlY3RvcltqXSlcbiAgfVxuICByZXR1cm4oeSlcbn1cblxuc29ib2xfRnVuXzEgPC0gZnVuY3Rpb24oWCwgdmVjdG9yKSB7XG4gICMgU29ib2wnIEcgRnVuY3Rpb24gd2l0aCBhIHRoZSBhZGRlZCBjb2VmZmlcbiAgeSA8LSAxXG4gIFxuICBmb3IgKGogaW4gMTpsZW5ndGgodmVjdG9yKSkge1xuICAgIHkgPC0geSAqIChhYnMoNCAqIFhbLCBqXSAtIDIpICsgdmVjdG9yW2pdKS8oMSArIDEuMSAqIHZlY3RvcltqXSlcbiAgfVxuICByZXR1cm4oeSlcbn1cbmBgYCJ9 -->
-<pre class="r"><code>sobol_Fun_0 &lt;- function(X, vector) {
-  # Original Sobol&#39; G Function
-  y &lt;- 1
-  
-  for (j in 1:length(vector)) {
-    y &lt;- y * (abs(4 * X[, j] - 2) + vector[j])/(1 + vector[j])
-  }
-  return(y)
-}
-
-sobol_Fun_1 &lt;- function(X, vector) {
-  # Sobol&#39; G Function with a the added coeffi
-  y &lt;- 1
-  
-  for (j in 1:length(vector)) {
-    y &lt;- y * (abs(4 * X[, j] - 2) + vector[j])/(1 + 1.1 * vector[j])
-  }
-  return(y)
-}</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<ul>
-<li><strong>0</strong>: Original Sobol’ G Function</li>
-<li><strong>1</strong>: Sobol’ G Function with modification</li>
-</ul>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxucnVuX21vZGVsIDwtIGZ1bmN0aW9uKFgpIHtcbiAgdHJpZ2dlciA8LSBYW1widHJpZ2dlclwiXVxuICBYX2lucHV0IDwtIFhbIW5hbWVzKFgpICVpbiUgXCJ0cmlnZ2VyXCJdICAjIFNlbGVjdCBhbGwgY29sdW1ucyBleGNlcHQgXCJ0cmlnZ2VyXCJcbiAgXG4gIGlmICh0cmlnZ2VyID09IDApIHtcbiAgICByZXR1cm4oc29ib2xfRnVuXzAobWF0cml4KFhfaW5wdXQsIG5yb3c9MSksIGFfdmVjdG9yKSlcbiAgfSBlbHNlIHtcbiAgICByZXR1cm4oc29ib2xfRnVuXzEobWF0cml4KFhfaW5wdXQsIG5yb3c9MSksIGFfdmVjdG9yKSlcbiAgfVxufVxuYGBgIn0= -->
-<pre class="r"><code>run_model &lt;- function(X) {
-  trigger &lt;- X[&quot;trigger&quot;]
-  X_input &lt;- X[!names(X) %in% &quot;trigger&quot;]  # Select all columns except &quot;trigger&quot;
-  
-  if (trigger == 0) {
-    return(sobol_Fun_0(matrix(X_input, nrow=1), a_vector))
-  } else {
-    return(sobol_Fun_1(matrix(X_input, nrow=1), a_vector))
-  }
-}</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p>Define the design matrix and compute the results:</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxubWF0IDwtIGRhdGEudGFibGUoc29ib2xfbWF0cmljZXMocGFyYW1zID0gcGFyYW1zLCBOID0gTiwgdHlwZSA9IFwiUlwiKSlcblxuIyBUcmFuc2Zvcm0gdGhlIHRyaWdnZXIgdmFyaWFibGUgdG8gYmluYXJ5XG5tYXRbLCB0cmlnZ2VyIDo9IGlmZWxzZSh0cmlnZ2VyID4gMC41LCAxLCAwKV1cblxuIyBDb21wdXRlIG1vZGVsIG91dHB1dHNcbnkgPC0gYXBwbHkobWF0LCAxLCBydW5fbW9kZWwpXG5gYGAifQ== -->
-<pre class="r"><code>mat &lt;- data.table(sobol_matrices(params = params, N = N, type = &quot;R&quot;))
-
-# Transform the trigger variable to binary
-mat[, trigger := ifelse(trigger &gt; 0.5, 1, 0)]
-
-# Compute model outputs
-y &lt;- apply(mat, 1, run_model)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuZ2dwbG90KGRhdGEuZnJhbWUoeSksIGFlcyh4ID0geSkpICtcbiAgICAgICBnZW9tX2hpc3RvZ3JhbShiaW5zID0gMzAsIGZpbGwgPSBcInN0ZWVsYmx1ZVwiLCBjb2xvciA9IFwiYmxhY2tcIiwgYWxwaGEgPSAwLjcpICtcbiAgICAgICB0aGVtZV9taW5pbWFsKCkgKyBsYWJzKHRpdGxlID0gXCJVQSB3aXRoIFRyaWdnZXJcIiwgeSA9IFwiXCIsIHggPSBcIk91dHB1dHNcIikgKyBcbiAgICAgICB0aGVtZShwbG90LnRpdGxlID0gZWxlbWVudF90ZXh0KGhqdXN0ID0gMC41LCBzaXplID0gMTYsIGZhY2UgPSBcImJvbGRcIiksXG4gICAgICAgICAgICAgICBheGlzLnRpdGxlID0gZWxlbWVudF90ZXh0KHNpemUgPSAxMiksXG4gICAgICAgICAgICAgICBheGlzLnRleHQgPSBlbGVtZW50X3RleHQoc2l6ZSA9IDEwKSlcbmBgYCJ9 -->
-<pre class="r"><code>ggplot(data.frame(y), aes(x = y)) +
-       geom_histogram(bins = 30, fill = &quot;steelblue&quot;, color = &quot;black&quot;, alpha = 0.7) +
-       theme_minimal() + labs(title = &quot;UA with Trigger&quot;, y = &quot;&quot;, x = &quot;Outputs&quot;) + 
-       theme(plot.title = element_text(hjust = 0.5, size = 16, face = &quot;bold&quot;),
-               axis.title = element_text(size = 12),
-               axis.text = element_text(size = 10))</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p>The sensitivity indices are computed and then plotted:</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuIyBDb21wdXRlIHNlbnNpdGl2aXR5IGluZGljZXNcbmluZCA8LSBzZW5zb2JvbDo6c29ib2xfaW5kaWNlcyhZID0geSwgTiA9IE4sIHBhcmFtcyA9IHBhcmFtcywgZmlyc3QgPSBmaXJzdCwgdG90YWwgPSB0b3RhbCwgYm9vdCA9IFRSVUUsIFIgPSBSKVxuYGBgIn0= -->
-<pre class="r"><code># Compute sensitivity indices
-ind &lt;- sensobol::sobol_indices(Y = y, N = N, params = params, first = first, total = total, boot = TRUE, R = R)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxucGxvdChpbmQpICsgbGFicyh0aXRsZSA9IFwiU29ib2wnIEcgRnVuY3Rpb24gdW5kZXIgVHJpZ2dlcnNcIikgKyB0aGVtZShsZWdlbmQucG9zaXRpb24gPSBcInJpZ2h0XCIpXG5gYGAifQ== -->
-<pre class="r"><code>plot(ind) + labs(title = &quot;Sobol&#39; G Function under Triggers&quot;) + theme(legend.position = &quot;right&quot;)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p>Now the trigger is less important in defining the output.</p>
-</div>
-<div id="example-3-use-of-triggers-to-compare-sobol-g-and-sobol-g-functions" class="section level1">
-<h1>Example 3: Use of triggers to compare Sobol’ G and Sobol’
-G*-functions</h1>
-<p>An extension of the Sobol G function is used in tandem with the
-original one. This extension permits to avoid the QUASI-RANDOM PROBLEM
-when computing the first observation. It is defined as follows:</p>
-<p><span class="math display">\[ G^*(X_1, \ldots, X_k, a_1, \ldots, a_k,
-\delta_1, \ldots, \delta_k, \alpha_1, \ldots, \alpha_k) = \prod_{i=1}^k
-g_i^*, \]</span></p>
-<p><span class="math display">\[g_i^* = \frac{(1 + \alpha_i) \cdot
-\left|2(X_i + \delta_i - I[X_i + \delta_i]) - 1\right|^{\alpha_i} +
-a_i}{1 + a_i}\]</span> <span class="math inline">\(X_i\)</span> are
-assumed to be <span class="math inline">\(U \sim [0,1]\)</span>, <span class="math inline">\(a_i \in \mathcal{R}^+ \space \forall i = 1, \dots,
-k\)</span>.</p>
-<p>The additional parameters are the <em>shift</em> <span class="math inline">\(\delta_i \in [0,1]\)</span> and the
-<em>curvature</em> <span class="math inline">\(\alpha_i \in
-\mathcal{R}^+\)</span>. When <span class="math inline">\(\delta_i =
-0\)</span> and <span class="math inline">\(\alpha_i = 1\)</span>, the
-function is equivalent to the original Sobol’ G function.</p>
-<p>The mean is defined as: <span class="math inline">\(E(G^*(X_i, a_i,
-\alpha_i)) = 1\)</span> because each <span class="math inline">\(X_i\)</span> has mean equal to 1.</p>
-<p>The variance is defined as: <span class="math inline">\(V(G^*(X_i,
-a_i, \alpha_i)) = \frac{\alpha_i^2}{(1+2\alpha_i)(1+a_i)^2}\)</span></p>
-<p>The coding proceeds as before.</p>
-<p>Ensure reproducibility by setting a seed:</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuc2V0LnNlZWQoMTAwKVxuYGBgIn0= -->
-<pre class="r"><code>set.seed(100)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p>Define the common parameters of interest of both functions for our
-sensitivity analysis:</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuTiA8LSAyXjExOyAjIE51bWJlciBvZiBzYW1wbGVzXG5cbmZpcnN0IDwtIFwic2FsdGVsbGlcIlxudG90YWwgPC0gXCJqYW5zZW5cIiAjIFNwZWNpZnkgdGhlIHR5cGUgb2Ygc2Vuc2l0aXZpdHkgaW5kaWNlcyBmb3IgdGhlIGZ1bmN0aW9uIFwic29ib2xfaW5kaWNlc1wiLlxuXG5SPC0xMF4zICMgTnVtYmVyIG9mIHJlcGxpY2F0aW9ucyBib290c3RyYXBcblxuYV92ZWN0b3IgPC0gYygwLCAxLCA0LjUsIDksIDk5LCA5OSwgOTksIDk5KVxuayA8LSBsZW5ndGgoYV92ZWN0b3IpICMgTnVtYmVyIG9mIHBhcmFtZXRlcnNcbnBhcmFtcyA8LSBjKHBhc3RlKFwieFwiLCAxOmssIHNlcCA9IFwiXCIpLCBcInRyaWdnZXJcIikgIyBQYXJhbWV0ZXJzIG5hbWVzLCB3aXRoIHRoZSB0cmlnZ2VyXG5gYGAifQ== -->
-<pre class="r"><code>N &lt;- 2^11; # Number of samples
-
-first &lt;- &quot;saltelli&quot;
-total &lt;- &quot;jansen&quot; # Specify the type of sensitivity indices for the function &quot;sobol_indices&quot;.
-
-R&lt;-10^3 # Number of replications bootstrap
-
-a_vector &lt;- c(0, 1, 4.5, 9, 99, 99, 99, 99)
-k &lt;- length(a_vector) # Number of parameters
-params &lt;- c(paste(&quot;x&quot;, 1:k, sep = &quot;&quot;), &quot;trigger&quot;) # Parameters names, with the trigger</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p>Again, the <span class="math inline">\(a_i\)</span> values are
-arbitrary; the higher they are, the less sensible the output is to the
-specific input.</p>
-<p>Define the specific parameters of the Sobol’ G* Function. These could
-be sampled as well, but for now we choose arbitrary values:</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuZGVsdGEgPC0gcnVuaWYoMSwgMCwgMSkgIyBTaGlmdFxuYWxwaGEgPC0gMC43ICMgQ3VydmF0dXJlXG5gYGAifQ== -->
-<pre class="r"><code>delta &lt;- runif(1, 0, 1) # Shift
-alpha &lt;- 0.7 # Curvature</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p>Now define the Sobol’ G and the Sobol’ G* functions:</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuc29ib2xfRnVuXzAgPC0gZnVuY3Rpb24oWCwgYV92ZWN0b3IpIHtcbiAgIyBNb2RlbC9mdW5jdGlvbiB3aXRoIGFic29sdXRlIHZhbHVlc1xuICB5IDwtIDFcbiAgXG4gIGZvciAoaiBpbiAxOmxlbmd0aChhX3ZlY3RvcikpIHtcbiAgICB5IDwtIHkgKiAoYWJzKDQgKiBYWywgal0gLSAyKSArIGFfdmVjdG9yW2pdKS8oMSArIGFfdmVjdG9yW2pdKVxuICB9XG4gIHJldHVybih5KVxufVxuXG5zb2JvbF9GdW5fU3RhciA8LSBmdW5jdGlvbihYLCBhX3ZlY3RvciwgZGVsdGEsIGFscGhhKSB7XG4gIHkgPC0gMVxuICAjIEVuc3VyZSBjb25zdHJhaW50cyBhcmUgbWV0XG4gIGlmIChhbHBoYSA8PSAwKSBzdG9wKFwiYWxwaGFfaSBtdXN0IGJlIGdyZWF0ZXIgdGhhbiAwXCIpXG4gIGlmIChkZWx0YSA8IDAgfHwgZGVsdGEgPiAxKSBzdG9wKFwiZGVsdGFfaSBtdXN0IGJlIGJldHdlZW4gMCBhbmQgMVwiKVxuICBcbiAgZm9yIChqIGluIDE6bGVuZ3RoKGFfdmVjdG9yKSkge1xuICAgICMgSW5kaWNhdG9yIGZ1bmN0aW9uIGlzIHRoZSBpbnRlZ2VyIHBhcnQgb2YgaXRzIGlubmVyIHZhbHVlXG4gICAgSSA8LSBmbG9vcihYWywgal0gKyBkZWx0YSlcbiAgICBcbiAgICAjIENhbGN1bGF0ZSBnX2kqXG4gICAgbnVtZXJhdG9yIDwtICgxICsgYWxwaGEpICogYWJzKDIgKiAoWFssIGpdICsgZGVsdGEgLSBJKSAtIDEpXmFscGhhICsgYV92ZWN0b3Jbal1cbiAgICBnX3N0YXIgPC0gbnVtZXJhdG9yIC8gKDEgKyBhX3ZlY3RvcltqXSlcbiAgICBcbiAgICB5IDwtIHkgKiBnX3N0YXJcbiAgfVxuICByZXR1cm4oeSlcbn1cbmBgYCJ9 -->
-<pre class="r"><code>sobol_Fun_0 &lt;- function(X, a_vector) {
-  # Model/function with absolute values
-  y &lt;- 1
-  
-  for (j in 1:length(a_vector)) {
-    y &lt;- y * (abs(4 * X[, j] - 2) + a_vector[j])/(1 + a_vector[j])
-  }
-  return(y)
-}
-
-sobol_Fun_Star &lt;- function(X, a_vector, delta, alpha) {
-  y &lt;- 1
-  # Ensure constraints are met
-  if (alpha &lt;= 0) stop(&quot;alpha_i must be greater than 0&quot;)
-  if (delta &lt; 0 || delta &gt; 1) stop(&quot;delta_i must be between 0 and 1&quot;)
-  
-  for (j in 1:length(a_vector)) {
-    # Indicator function is the integer part of its inner value
-    I &lt;- floor(X[, j] + delta)
-    
-    # Calculate g_i*
-    numerator &lt;- (1 + alpha) * abs(2 * (X[, j] + delta - I) - 1)^alpha + a_vector[j]
-    g_star &lt;- numerator / (1 + a_vector[j])
-    
-    y &lt;- y * g_star
-  }
-  return(y)
-}</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p>A specific function is created in order to be applied on each row of
-the design matrix. The two different Sobol’ G Functions are then run
-according to the row-specific trigger value:</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxucnVuX21vZGVsIDwtIGZ1bmN0aW9uKFgpIHtcbiAgdHJpZ2dlciA8LSBYW1widHJpZ2dlclwiXVxuICBYX2lucHV0IDwtIFhbIW5hbWVzKFgpICVpbiUgXCJ0cmlnZ2VyXCJdICAjIFNlbGVjdCBhbGwgY29sdW1ucyBleGNlcHQgXCJ0cmlnZ2VyXCJcbiAgXG4gIGlmICh0cmlnZ2VyID09IDApIHtcbiAgICByZXR1cm4oc29ib2xfRnVuXzAobWF0cml4KFhfaW5wdXQsIG5yb3c9MSksIGFfdmVjdG9yKSlcbiAgfSBlbHNlIHtcbiAgICByZXR1cm4oc29ib2xfRnVuX1N0YXIobWF0cml4KFhfaW5wdXQsIG5yb3c9MSksIGFfdmVjdG9yLCBkZWx0YSwgYWxwaGEpKVxuICB9XG59XG5gYGAifQ== -->
-<pre class="r"><code>run_model &lt;- function(X) {
-  trigger &lt;- X[&quot;trigger&quot;]
-  X_input &lt;- X[!names(X) %in% &quot;trigger&quot;]  # Select all columns except &quot;trigger&quot;
-  
-  if (trigger == 0) {
-    return(sobol_Fun_0(matrix(X_input, nrow=1), a_vector))
-  } else {
-    return(sobol_Fun_Star(matrix(X_input, nrow=1), a_vector, delta, alpha))
-  }
-}</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p>The sample matrix is defined and the columns are appropriately
-transformed. In our case, we just need to discretize the “trigger”
-variable.</p>
-<ul>
-<li>** 0: Sobol’ G Function **</li>
-<li>** 1: Sobol’ G* Function **</li>
-</ul>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxubWF0IDwtIGRhdGEudGFibGUoc29ib2xfbWF0cmljZXMocGFyYW1zID0gcGFyYW1zLCBOID0gTiwgdHlwZSA9IFwiUlwiKSlcblxuIyBUcmFuc2Zvcm0gdGhlIHRyaWdnZXIgdmFyaWFibGUgdG8gYmluYXJ5XG5tYXQgPC0gKG1hdFssIHRyaWdnZXIgOj0gaWZlbHNlKHRyaWdnZXIgPiAwLjUsIDEsIDApXSlcblxuIyBDb21wdXRlIG1vZGVsIG91dHB1dHNcbnkgPC0gYXBwbHkobWF0LCAxLCBydW5fbW9kZWwpXG5gYGAifQ== -->
-<pre class="r"><code>mat &lt;- data.table(sobol_matrices(params = params, N = N, type = &quot;R&quot;))
-
-# Transform the trigger variable to binary
-mat &lt;- (mat[, trigger := ifelse(trigger &gt; 0.5, 1, 0)])
-
-# Compute model outputs
-y &lt;- apply(mat, 1, run_model)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p>The output distribution is plotted:</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuZ2dwbG90KGRhdGEuZnJhbWUoeSksIGFlcyh4ID0geSkpICtcbiAgICAgICAgICAgICAgICAgIGdlb21faGlzdG9ncmFtKGJpbnMgPSAzMCwgZmlsbCA9IFwic3RlZWxibHVlXCIsIGNvbG9yID0gXCJibGFja1wiLCBhbHBoYSA9IDAuNykgK1xuICAgICAgICAgICAgICAgICAgdGhlbWVfbWluaW1hbCgpICsgbGFicyh5ID0gXCJcIiwgdGl0bGUgPSBcIk91dHB1dCBEaXN0cmlidXRpb24gb2YgU29ib2wnIEcqIEZ1bmN0aW9uIHVuZGVyIFRyaWdnZXJzXCIpICtcbiAgICAgICAgICAgICAgICAgIHRoZW1lKHBsb3QudGl0bGUgPSBlbGVtZW50X3RleHQoaGp1c3QgPSAwLjUsIHNpemUgPSAxNiwgZmFjZSA9IFwiYm9sZFwiKSlcbmBgYCJ9 -->
-<pre class="r"><code>ggplot(data.frame(y), aes(x = y)) +
-                  geom_histogram(bins = 30, fill = &quot;steelblue&quot;, color = &quot;black&quot;, alpha = 0.7) +
-                  theme_minimal() + labs(y = &quot;&quot;, title = &quot;Output Distribution of Sobol&#39; G* Function under Triggers&quot;) +
-                  theme(plot.title = element_text(hjust = 0.5, size = 16, face = &quot;bold&quot;))</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p>The sensitivity indices are computed and then plotted:</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuIyBDb21wdXRlIHNlbnNpdGl2aXR5IGluZGljZXNcbmluZCA8LSBzZW5zb2JvbDo6c29ib2xfaW5kaWNlcyhZID0geSwgTiA9IE4sIHBhcmFtcyA9IHBhcmFtcywgZmlyc3QgPSBmaXJzdCwgdG90YWwgPSB0b3RhbCwgYm9vdCA9IFRSVUUsIFIgPSBSKVxuYGBgIn0= -->
-<pre class="r"><code># Compute sensitivity indices
-ind &lt;- sensobol::sobol_indices(Y = y, N = N, params = params, first = first, total = total, boot = TRUE, R = R)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxucGxvdChpbmQpICsgbGFicyh0aXRsZSA9IFwiU29ib2wnIEcgRnVuY3Rpb24gdW5kZXIgdHJpZ2dlclwiKSArIHRoZW1lKGxlZ2VuZC5wb3NpdGlvbiA9IFwicmlnaHRcIilcbmBgYCJ9 -->
-<pre class="r"><code>plot(ind) + labs(title = &quot;Sobol&#39; G Function under trigger&quot;) + theme(legend.position = &quot;right&quot;)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-</div>
-<div id="example-4-use-of-triggers-in-garch-modelling" class="section level1">
-<h1>Example 4: Use of triggers in GARCH modelling</h1>
-<p>GARCH (Generalized AutoRegressive Conditional Heteroskedasticity)
-modelling is a statistical approach used to analyze and forecast
-volatility in time series data.</p>
-<p>A generic GARCH(m, s) model is defined as:</p>
-<p><span class="math display">\[ \sigma_t^2 = \alpha_0 + \sum_{i=1}^{m}
-\alpha_i a_{t-i}^2 + \sum_{j=1}^{s} \beta_j \sigma_{t-j}^2 \]</span></p>
-<p>where:</p>
-<ul>
-<li><p><span class="math inline">\(a_t = \sigma_t
-\epsilon_t\)</span>;</p></li>
-<li><p><span class="math inline">\(\alpha_0 &gt; 0, \alpha_i \geq 0,
-\beta_j \geq 0\)</span>;</p></li>
-<li><p><span class="math inline">\(\sum_{i=1}^{max(m, s)} (\alpha_i +
-\beta_i) &lt; 1\)</span></p></li>
-</ul>
-<p>These are the <em>stability conditions</em>.</p>
-<p>These model can be extended to take into account volatility
-asymmetries, especially leverage effects, where negative shocks have a
-different impact on volatility than positive shocks of the same
-magnitude.</p>
-<p>The extensions are the <strong>GJR-GARCH</strong> and
-<strong>T-GARCH</strong> models.</p>
-<p>The GJR-GARCH model is defined as:</p>
-<p><span class="math display">\[ \sigma_t^2 = \alpha_0 + \sum_{i=1}^{m}
-\alpha_i a_{t-i}^2 + \sum_{j=1}^{s} \beta_j \sigma_{t-j}^2 +
-\sum_{k=1}^{s} \gamma_k a_{t-k}^2 I_{t-k} \]</span> and the T-GARCH
-model is defined as:</p>
-<p><span class="math display">\[ \sigma_t^2 = \alpha_0 + \sum_{i=1}^{m}
-\alpha_i |a_{t-i}| + \sum_{j=1}^{s} \beta_j |\sigma_{t-j}| +
-\sum_{k=1}^{s} \gamma_k |a_{t-k}| I_{t-k} \]</span></p>
-<p><span class="math inline">\(I_{t-k}\)</span> is an indicator function
-function that takes values 1 if the past residuals negative and equal to
-0 if the past residual is non-negative.</p>
-<p>These models can be efficiently represented as:</p>
-<p><span class="math display">\[\sigma_t^2 = \alpha_0 + \sum_{i=1}^{m}
-\alpha_i |a_{t-i}|^c + \sum_{j=1}^{s} \beta_j |\sigma_{t-j}|^c +
-\sum_{k=1}^{s} \gamma_k |a_{t-k}|^c I_{t-k}\]</span> c can take value 1
-or 2, depending on the model:</p>
-<ul>
-<li>when c = 2, the model represents the GJR-GARCH model,</li>
-<li>when c = 1, the model represents the T-GARCH model.</li>
-</ul>
-<p>Hence, c can be considered as a global sensitivity analysis trigger
-that could help us in …</p>
-<p>To make the example simple, we start by forecasting a single value in
-the future (the so-called “one-step ahead forecast”) for the conditional
-variance of the stock returns, one for each distribution.</p>
-<div id="gjr-garch-and-t-garch-volatility-modelling-coding" class="section level2">
-<h2>GJR-GARCH and T-GARCH volatility modelling: coding</h2>
-<p>The feasible input space involves 7 parameters:</p>
-<ul>
-<li><p>ARCH order (q): usually 0, 1 or 2 (two binary
-variables);</p></li>
-<li><p>GARCH order (p): usually 0, 1 or 2 (two binary
-variables);</p></li>
-<li><p>constant term <span class="math inline">\(\alpha_0\)</span>,
-usually between 0 and 0.1 (continuous);</p></li>
-<li><p><span class="math inline">\(\alpha_i\)</span> coefficients,
-between 0 and 0.24999, to respect stability constraints
-(continuous);</p></li>
-<li><p><span class="math inline">\(\beta_j\)</span> coefficients,
-between 0 and 0.24999, to respect stability constraints
-(continuous);</p></li>
-<li><p>the innovation term, <span class="math inline">\(\epsilon_t\)</span>, can be defined as different
-skewed and platykurtic distributions, the Student’s t-distribution is
-chosen to capture “fat-tailedness”, with a range from 1 to 30 degrees of
-freedom. Recall that <span class="math inline">\(\text{dof} \rightarrow
-\infty\)</span> converges to a normal distribution.</p></li>
-</ul>
-<p>the AR-MA orders, that govern the mean equation, fixed to are
-(0,0).</p>
-<p>To avoid over-complicating the code, we shorten the coefficient
-parameter space to 0.24999, so in the “worst-case” scenario the sum of
-the coefficients in GARCH(2,2) is less than 1, thus respecting the
-stability conditions.</p>
-<p>We use the Microsoft stock data from 2010 to August 2024.</p>
-<!-- rnb-text-end -->
-<!-- rnb-text-begin -->
-<p>The model is specified…</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxubSA8LSAxXG5zIDwtMVxuXG5zcGVjIDwtIHVnYXJjaHNwZWMoXG4gIHZhcmlhbmNlLm1vZGVsID0gbGlzdChtb2RlbCA9IFwidEdBUkNIXCIsIGdhcmNoT3JkZXIgPSBjKDEsIDEpKSxcbiAgbWVhbi5tb2RlbCA9IGxpc3QoYXJtYU9yZGVyID0gYygxLCAxKSwgaW5jbHVkZS5tZWFuID0gVFJVRSksXG4gIGRpc3RyaWJ1dGlvbi5tb2RlbD1cInN0ZFwiLCBmaXhlZC5wYXJzPWxpc3Qoc2hhcGU9MykgICMgU3R1ZGVudCdzIHQgZGlzdHJpYnV0aW9uIGZvciBiZXR0ZXIgZml0XG4pXG5gYGAifQ== -->
-<pre class="r"><code>m &lt;- 1
-s &lt;-1
-
-spec &lt;- ugarchspec(
-  variance.model = list(model = &quot;tGARCH&quot;, garchOrder = c(1, 1)),
-  mean.model = list(armaOrder = c(1, 1), include.mean = TRUE),
-  distribution.model=&quot;std&quot;, fixed.pars=list(shape=3)  # Student&#39;s t distribution for better fit
-)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p>…and then fitted:</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuZml0IDwtIHVnYXJjaGZpdChzcGVjLCByZXR1cm5zKVxuYGBgIn0= -->
-<pre class="r"><code>fit &lt;- ugarchfit(spec, returns)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuc2hvdyhmaXQpXG5gYGAifQ== -->
-<pre class="r"><code>show(fit)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p><span class="math display">\[\{\epsilon_t\} \sim iid(0,1)\]</span>
-or</p>
-<p><span class="math display">\[\{\epsilon_t\} \sim t(5)\]</span> ##
-Sensitivity Analysis</p>
-<p>The parameters of our model under scrutiny and the SA
-(hyper)parameters are defined:</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuIyBEZWZpbmUgdGhlIHBhcmFtZXRlcnNcbnBhcmFtcyA8LSBjKFwiQVJDSG9yZGVyXCIsIFwiR0FSQ0hvcmRlclwiLCBcIkNvbnN0YW50VGVybVwiLCBcIkFSQ0hDb2VmZlwiLFxuICAgICAgICAgICAgXCJHQVJDSENvZWZmXCIsIFwic3R1ZGVudFRfZG9mXCIsIFwiVHZzR0pSR2FyY2hUcmlnZ2VyXCIpXG5wYXJhbXMgPC0gYyhcIkFSQ0hvcmRlclwiLCBcIkdBUkNIb3JkZXJcIiwgXCJpbnRlcmNlcHRfdGVybVwiLCBcIkFSQ0hDb2VmZlwiLFxuICAgICAgICAgICAgXCJHQVJDSENvZWZmXCIsIFwic3R1ZGVudFRfZG9mXCIpXG5OIDwtIDJeMTNcbmZpcnN0IDwtIFwic2FsdGVsbGlcIlxudG90YWwgPC0gXCJqYW5zZW5cIlxuYGBgIn0= -->
-<pre class="r"><code># Define the parameters
-params &lt;- c(&quot;ARCHorder&quot;, &quot;GARCHorder&quot;, &quot;ConstantTerm&quot;, &quot;ARCHCoeff&quot;,
-            &quot;GARCHCoeff&quot;, &quot;studentT_dof&quot;, &quot;TvsGJRGarchTrigger&quot;)
-params &lt;- c(&quot;ARCHorder&quot;, &quot;GARCHorder&quot;, &quot;intercept_term&quot;, &quot;ARCHCoeff&quot;,
-            &quot;GARCHCoeff&quot;, &quot;studentT_dof&quot;)
-N &lt;- 2^13
-first &lt;- &quot;saltelli&quot;
-total &lt;- &quot;jansen&quot;</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p>The design matrix is created with the <code>sensobol</code> package
-and the parameters uniformly distributed random samples are mapped to
-their respective intervals. Recall that some intervals must respect the
-stochastic processes behind the GARCH model.</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuIyBjcmVhdGUgYSBkZXNpZ24gbWF0cml4IHdpdGggcmFuZG9tIHNhbXBsZVxubWF0IDwtIGFzLmRhdGEuZnJhbWUoc29ib2xfbWF0cmljZXMocGFyYW1zID0gcGFyYW1zLCBOID0gTiwgdHlwZSA9IFwiUlwiKSlcblxuI05vdyBlYWNoIHZhcmlhYmxlIG11c3QgYmUgdHJhbnNmb3JtZWQgdG8gdGhlIGFwcHJvcHJpYXRlIHR5cGUgYW5kIG1hcHBlZCBpbiB0aGVpciBwcm9wZXIgaW50ZXJ2YWxzLlxuXG4jIGNyZWF0ZSBpbnRlcnZhbHMgYW5kIG1hcCBkaXNjcmV0ZSB2YWx1ZXMgb2YgQVJDSCBvcmRlcnNcbm1hdCRBUkNIb3JkZXIgPC0gYXMuZmFjdG9yKGN1dChtYXQkQVJDSG9yZGVyLCBicmVha3MgPSBjKC0xLCAwLjMzMzMzLCAwLjY2NjY2LCAxKSwgbGFiZWxzID0gYygwLCAxLCAyKSwgcmlnaHQgPSBGQUxTRSkpXG5cbiMganVzdCBmb3Igb25jZSwgY2hlY2sgaWYgZWFjaCBvcmRlciBoYXMgdGhlIHNhbWUgZnJlcXVlbmN5XG5mcmVxX3RhYmxlIDwtIHRhYmxlKG1hdCRBUkNIQ29lZmYpXG5cbiMgY3JlYXRlIGludGVydmFscyBhbmQgbWFwIGRpc2NyZXRlIHZhbHVlcyBvZiBHQVJDSCBvcmRlcnNcbm1hdCRHQVJDSG9yZGVyIDwtIGFzLmZhY3RvcihjdXQobWF0JEdBUkNIb3JkZXIsIGJyZWFrcyA9IGMoLTEsIDAuMzMzMzMsIDAuNjY2NjYsIDEpLCBsYWJlbHMgPSBjKDAsIDEsIDIpLCByaWdodCA9IEZBTFNFKSlcblxuIyBjcmVhdGUgaW50ZXJ2YWxzIGFuZCBtYXAgY29udGludW91cyB2YWx1ZXMgb2YgQVJDSC9HQVJDSCBjb2VmZmljaWVudHMgdGVybXNcbm1hdCRBUkNIQ29lZmYgPC0gbWF0JEFSQ0hDb2VmZiAqIDAuMjQ5OTlcbm1hdCRHQVJDSENvZWZmIDwtIG1hdCRHQVJDSENvZWZmICogMC4yNDk5OVxuXG4jIENyZWF0ZSBpbnRlcnZhbHNcbmludGVydmFscyA8LSBzZXEoMCwgMSwgYnkgPSAxLzMwKVxuIyBGdW5jdGlvbiB0byBhc3NpZ24gcG9zaXRpb25hbCB2YWx1ZXNcbmFzc2lnbl9wb3NpdGlvbiA8LSBmdW5jdGlvbih4LCBpbnRlcnZhbHMpIHtcbiAgaW50ZXJ2YWxfaW5kZXggPC0gZmluZEludGVydmFsKHgsIGludGVydmFscywgcmlnaHRtb3N0LmNsb3NlZCA9IFRSVUUpXG4gIHJldHVybihpbnRlcnZhbF9pbmRleClcbn1cblxubWF0JHN0dWRlbnRUX2RvZiA8LSBhcy5mYWN0b3IoYXNzaWduX3Bvc2l0aW9uKG1hdCRzdHVkZW50VF9kb2YsIGludGVydmFscykpXG5cbiMgbWFwIHRoZSBjb3N0YW50IHRlcm0gaW50ZXJ2YWxcbm1hdCRpbnRlcmNlcHRfdGVybSA8LSBtYXQkaW50ZXJjZXB0X3Rlcm0gKiAwLjFcblxuIyBDcmVhdGUgdGhlIHRyaWdnZXJcbiMgbWF0JFR2c0dKUkdhcmNoVHJpZ2dlciA8LSBhcy5mYWN0b3IoY3V0KG1hdCRUdnNHSlJHYXJjaFRyaWdnZXIsIGJyZWFrcyA9IGMoLTEsIDAuNSwgMSksIGxhYmVscyA9IGMoMCwgMSksICMgICAgICAgICAgICAgICAgICAgICAgICAgICAgIHJpZ2h0ID0gRkFMU0UpKVxuYGBgIn0= -->
-<pre class="r"><code># create a design matrix with random sample
-mat &lt;- as.data.frame(sobol_matrices(params = params, N = N, type = &quot;R&quot;))
-
-#Now each variable must be transformed to the appropriate type and mapped in their proper intervals.
-
-# create intervals and map discrete values of ARCH orders
-mat$ARCHorder &lt;- as.factor(cut(mat$ARCHorder, breaks = c(-1, 0.33333, 0.66666, 1), labels = c(0, 1, 2), right = FALSE))
-
-# just for once, check if each order has the same frequency
-freq_table &lt;- table(mat$ARCHCoeff)
-
-# create intervals and map discrete values of GARCH orders
-mat$GARCHorder &lt;- as.factor(cut(mat$GARCHorder, breaks = c(-1, 0.33333, 0.66666, 1), labels = c(0, 1, 2), right = FALSE))
-
-# create intervals and map continuous values of ARCH/GARCH coefficients terms
-mat$ARCHCoeff &lt;- mat$ARCHCoeff * 0.24999
-mat$GARCHCoeff &lt;- mat$GARCHCoeff * 0.24999
-
-# Create intervals
-intervals &lt;- seq(0, 1, by = 1/30)
-# Function to assign positional values
-assign_position &lt;- function(x, intervals) {
-  interval_index &lt;- findInterval(x, intervals, rightmost.closed = TRUE)
-  return(interval_index)
-}
-
-mat$studentT_dof &lt;- as.factor(assign_position(mat$studentT_dof, intervals))
-
-# map the costant term interval
-mat$intercept_term &lt;- mat$intercept_term * 0.1
-
-# Create the trigger
-# mat$TvsGJRGarchTrigger &lt;- as.factor(cut(mat$TvsGJRGarchTrigger, breaks = c(-1, 0.5, 1), labels = c(0, 1), #                             right = FALSE))</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p>Now the forecasting R function is defined. It involves the estimation
-of the GARCH model and the one-step ahead forecast at each matrix
-row.</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuXG4jIERlZmluZSB0aGUgZnVuY3Rpb25cbmNvbXB1dGVfZm9yZWNhc3QgPC0gZnVuY3Rpb24obWF0LCByZXR1cm5zLCBudW1fcm93cyA9IG5yb3cobWF0KSkge1xuICAjIFByZS1hbGxvY2F0ZSBhIHZlY3RvciBmb3IgZm9yZWNhc3RzXG4gIGZvcmVjYXN0X3ZlY3RvciA8LSBudW1lcmljKG51bV9yb3dzKVxuICBcbiAgIyBMb29wIG92ZXIgdGhlIHNwZWNpZmllZCBudW1iZXIgb2Ygcm93c1xuICBmb3IgKHJvdyBpbiAxOm51bV9yb3dzKSB7XG4gICAgIyBFeHRyYWN0IHBhcmFtZXRlcnMgZnJvbSB0aGUgcm93XG4gICAgYXJjaF9vcmRlciA8LSBtYXRbcm93LCBcIkFSQ0hvcmRlclwiXVxuICAgIGdhcmNoX29yZGVyIDwtIG1hdFtyb3csIFwiR0FSQ0hvcmRlclwiXVxuICAgIGludGVyY2VwdF90ZXJtIDwtIG1hdFtyb3csIFwiaW50ZXJjZXB0X3Rlcm1cIl1cbiAgICBpbnRlcmNlcHRfdGVybSA8LSAwLjA1XG4gICAgYXJjaF9jb2VmZiA8LSBtYXRbcm93LCBcIkFSQ0hDb2VmZlwiXVxuICAgIGFyY2hfY29lZmYgPC0gMVxuICAgIGdhcmNoX2NvZWZmIDwtIG1hdFtyb3csIFwiR0FSQ0hDb2VmZlwiXVxuICAgIGdhcmNoX2NvZWZmIDwtIDFcbiAgICBzdHVkZW50X3RfZG9mIDwtIG1hdFtyb3csIFwic3R1ZGVudFRfZG9mXCJdXG4gICAgXG4gICAgIyBTcGVjaWZ5IHdoaWNoIEdBUkNIIHRvIHVzZVxuICAgIHNwZWMgPC0gdWdhcmNoc3BlYyhcbiAgICAgIHZhcmlhbmNlLm1vZGVsID0gbGlzdChtb2RlbCA9IFwiZ2pyR0FSQ0hcIixcbiAgICAgICAgICAgICAgICAgICAgICAgICAgICBnYXJjaE9yZGVyID0gYyhnYXJjaF9vcmRlciwgYXJjaF9vcmRlcikpLFxuICAgICAgbWVhbi5tb2RlbCA9IGxpc3QoYXJtYU9yZGVyID0gYygwLCAwKSwgaW5jbHVkZS5tZWFuID0gVFJVRSksXG4gICAgICBkaXN0cmlidXRpb24ubW9kZWwgPSBcInN0ZFwiLFxuICAgICAgc3RhcnQucGFycyA9IGxpc3QoXG4gICAgICAgIG11ID0gbWVhbihyZXR1cm5zKSxcbiAgICAgICAgb21lZ2EgPSBpbnRlcmNlcHRfdGVybSxcbiAgICAgICAgYWxwaGExID0gYXJjaF9jb2VmZixcbiAgICAgICAgYmV0YTEgPSBnYXJjaF9jb2VmZixcbiAgICAgICAgZ2FtbWExID0gMCksXG4gICAgICBmaXhlZC5wYXJzID0gbGlzdChzaGFwZSA9IHN0dWRlbnRfdF9kb2YpXG4gICAgKVxuICAgIFxuICAgICMgRXN0aW1hdGUgYW5kIGZpdCB0aGUgR0FSQ0ggTW9kZWwgdG8gdGhlIHN0b2NrIHJldHVybnNcbiAgICBmaXQgPC0gdHJ5KHVnYXJjaGZpdChzcGVjLCByZXR1cm5zLCBzb2x2ZXIgPSBcImh5YnJpZFwiKSwgc2lsZW50ID0gVFJVRSlcbiAgICBcbiAgICAjIE9uZS1zdGVwIEFoZWFkIEZvcmVjYXN0XG4gICAgaWYgKCFpbmhlcml0cyhmaXQsIFwidHJ5LWVycm9yXCIpKSB7XG4gICAgICBmb3JlY2FzdCA8LSB1Z2FyY2hmb3JlY2FzdChmaXQsIG4uYWhlYWQgPSAxKVxuICAgICAgZm9yZWNhc3RfdmVjdG9yW3Jvd10gPC0gZm9yZWNhc3RAZm9yZWNhc3Qkc2lnbWFGb3JcbiAgICB9IGVsc2Uge1xuICAgICAgZm9yZWNhc3RfdmVjdG9yW3Jvd10gPC0gTkFcbiAgICB9XG4gIH1cbiAgXG4gIHJldHVybihmb3JlY2FzdF92ZWN0b3IpXG59XG5gYGAifQ== -->
-<pre class="r"><code>
-# Define the function
-compute_forecast &lt;- function(mat, returns, num_rows = nrow(mat)) {
-  # Pre-allocate a vector for forecasts
-  forecast_vector &lt;- numeric(num_rows)
-  
-  # Loop over the specified number of rows
-  for (row in 1:num_rows) {
-    # Extract parameters from the row
-    arch_order &lt;- mat[row, &quot;ARCHorder&quot;]
-    garch_order &lt;- mat[row, &quot;GARCHorder&quot;]
-    intercept_term &lt;- mat[row, &quot;intercept_term&quot;]
-    intercept_term &lt;- 0.05
-    arch_coeff &lt;- mat[row, &quot;ARCHCoeff&quot;]
-    arch_coeff &lt;- 1
-    garch_coeff &lt;- mat[row, &quot;GARCHCoeff&quot;]
-    garch_coeff &lt;- 1
-    student_t_dof &lt;- mat[row, &quot;studentT_dof&quot;]
-    
-    # Specify which GARCH to use
-    spec &lt;- ugarchspec(
-      variance.model = list(model = &quot;gjrGARCH&quot;,
-                            garchOrder = c(garch_order, arch_order)),
-      mean.model = list(armaOrder = c(0, 0), include.mean = TRUE),
-      distribution.model = &quot;std&quot;,
-      start.pars = list(
-        mu = mean(returns),
-        omega = intercept_term,
-        alpha1 = arch_coeff,
-        beta1 = garch_coeff,
-        gamma1 = 0),
-      fixed.pars = list(shape = student_t_dof)
-    )
-    
-    # Estimate and fit the GARCH Model to the stock returns
-    fit &lt;- try(ugarchfit(spec, returns, solver = &quot;hybrid&quot;), silent = TRUE)
-    
-    # One-step Ahead Forecast
-    if (!inherits(fit, &quot;try-error&quot;)) {
-      forecast &lt;- ugarchforecast(fit, n.ahead = 1)
-      forecast_vector[row] &lt;- forecast@forecast$sigmaFor
-    } else {
-      forecast_vector[row] &lt;- NA
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuYmF0ZW1hbl9wbG90IDwtIGZ1bmN0aW9uKE4wLCBsYW1iZGFzLCB0KSB7XG4gIG4gPC0gbGVuZ3RoKGxhbWJkYXMpXG4gIG91dCA8LSBtYXRyaXgoMCwgbnJvdyA9IHQsIG5jb2wgPSBuKVxuICBmb3IgKGkgaW4gc2VxX2xlbih0KSkge1xuICAgIGZvciAoaiBpbiBzZXFfbGVuKG4pKSB7XG4gICAgICBvdXRbaSwgal0gPC0gYmF0ZW1hbl9lcXVhdGlvbihOMCwgbGFtYmRhc1sxOmpdLCBpKVxuICAgIH1cbiAgfVxuICBcbiAgIyBDb252ZXJ0IG1hdHJpeCB0byBkYXRhZnJhbWUgZm9yIGdncGxvdFxuICBkZiA8LSBkYXRhLmZyYW1lKHRpbWUgPSByZXAoc2VxX2xlbih0KSwgbiksXG4gICAgICAgICAgICAgICAgICAgdmFsdWUgPSBhcy52ZWN0b3Iob3V0KSxcbiAgICAgICAgICAgICAgICAgICBzZXJpZXMgPSBmYWN0b3IocmVwKHNlcV9sZW4obiksIGVhY2ggPSB0KSkpXG4gIFxuICAjIFBsb3QgdXNpbmcgZ2dwbG90MlxuICBnZ3Bsb3QoZGYsIGFlcyh4ID0gdGltZSwgeSA9IHZhbHVlLCBjb2xvciA9IHNlcmllcykpICtcbiAgICBnZW9tX2xpbmUobGluZXdpZHRoID0gMSkgK1xuICAgIGxhYnMoeCA9ICd0JywgeSA9ICdOX2sodCknLCBjb2xvciA9ICdTZXJpZXMnKSArXG4gICAgdGhlbWVfbWluaW1hbCgpXG59XG5gYGAifQ== -->
+<pre class="r"><code>bateman_plot &lt;- function(N0, lambdas, t) {
+  n &lt;- length(lambdas)
+  out &lt;- matrix(0, nrow = t, ncol = n)
+  for (i in seq_len(t)) {
+    for (j in seq_len(n)) {
+      out[i, j] &lt;- bateman_equation(N0, lambdas[1:j], i)
     }
   }
   
-  return(forecast_vector)
+  # Convert matrix to dataframe for ggplot
+  df &lt;- data.frame(time = rep(seq_len(t), n),
+                   value = as.vector(out),
+                   series = factor(rep(seq_len(n), each = t)))
+  
+  # Plot using ggplot2
+  ggplot(df, aes(x = time, y = value, color = series)) +
+    geom_line(linewidth = 1) +
+    labs(x = &#39;t&#39;, y = &#39;N_k(t)&#39;, color = &#39;Series&#39;) +
+    theme_minimal()
 }</code></pre>
 <!-- rnb-source-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
-<p>Given function complexity, we run it on a small subset (10 rows) of
-the matrix to check if it works properly.</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuc3RhcnQgPSBTeXMudGltZSgpXG5jb21wdXRlX2ZvcmVjYXN0KG1hdCwgcmV0dXJucywgbnVtX3Jvd3MgPSAxMClcbmNvbXB1dGF0aW9uX3RpbWUgPC0gU3lzLnRpbWUoKSAtIHN0YXJ0XG5gYGAifQ== -->
-<pre class="r"><code>start = Sys.time()
-compute_forecast(mat, returns, num_rows = 10)
-computation_time &lt;- Sys.time() - start</code></pre>
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuYmF0ZW1hbl9wbG90KDEsIGxhbWJkYXNfdmVjdG9yLCAxMDApXG5gYGAifQ== -->
+<pre class="r"><code>bateman_plot(1, lambdas_vector, 100)</code></pre>
 <!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p>on a (rough) average, the function takes…</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuYXMuZG91YmxlKGNvbXB1dGF0aW9uX3RpbWUvMTApXG5gYGAifQ== -->
-<pre class="r"><code>as.double(computation_time/10)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p>…seconds to run.</p>
-<p>An attempt to parallelize the computation of the forecast vector is
-made. For this purpose, the packages <code>foreach</code>,
-<code>parallel</code> and <code>doParallel</code> are used.</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuaW5zdGFsbF9pZl9taXNzaW5nKGMoIFwiZm9yZWFjaFwiLCBcInBhcmFsbGVsXCIsIFwiZG9QYXJhbGxlbFwiKSlcblxubGlicmFyeShmb3JlYWNoKVxubGlicmFyeShwYXJhbGxlbClcbmxpYnJhcnkoZG9QYXJhbGxlbClcbmBgYCJ9 -->
-<pre class="r"><code>install_if_missing(c( &quot;foreach&quot;, &quot;parallel&quot;, &quot;doParallel&quot;))
-
-library(foreach)
-library(parallel)
-library(doParallel)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p>Before executing the parallelized nested loop, we order the computer
-to use 75% of the cores available in order to take advantage of parallel
-computing.</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxubl9jb3JlcyA8LSBtYWtlQ2x1c3Rlcihyb3VuZChkZXRlY3RDb3JlcygpICogMC43NSkpXG5yZWdpc3RlckRvUGFyYWxsZWwobl9jb3JlcylcbmBgYCJ9 -->
-<pre class="r"><code>n_cores &lt;- makeCluster(round(detectCores() * 0.75))
-registerDoParallel(n_cores)</code></pre>
-<!-- rnb-source-end -->
+<!-- rnb-plot-begin eyJoZWlnaHQiOjQzMi42MzI5LCJ3aWR0aCI6NzAwLCJzaXplX2JlaGF2aW9yIjowLCJjb25kaXRpb25zIjpbXX0= -->
+<p><img src="data:image/png;base64,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" /></p>
+<!-- rnb-plot-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxub3V0IDwtIGZvcmVhY2goaSA9IDE6bnJvdyhtYXQpLFxuICAgICAgICAgICAgICAgLnBhY2thZ2VzID0gXCJydWdhcmNoXCIsXG4gICAgICAgICAgICAgICAuY29tYmluZSA9IGMpICVkb3BhciUge1xuICAgICAgICAgICAgICAgICBjb21wdXRlX2ZvcmVjYXN0KG1hdCwgcmV0dXJucywgbnVtX3Jvd3MgPSAxMDApXG4gICAgICAgICAgICAgICB9XG4gICAgICAgICAgICAgICAgXG5gYGAifQ== -->
-<pre class="r"><code>out &lt;- foreach(i = 1:nrow(mat),
-               .packages = &quot;rugarch&quot;,
-               .combine = c) %dopar% {
-                 compute_forecast(mat, returns, num_rows = 100)
-               }
-                </code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuIyBGdW5jdGlvbiB0byBydW4gR0FSQ0ggbW9kZWwgZm9yIGEgc2luZ2xlIHJvd1xucnVuX2dhcmNoX21vZGVsIDwtIGZ1bmN0aW9uKHJvdykge1xuICAjIEV4dHJhY3QgcGFyYW1ldGVycyBmcm9tIHRoZSByb3dcbiAgYXJjaF9vcmRlciA8LSBhcy5pbnRlZ2VyKHJvd1tcIkFSQ0hvcmRlclwiXSlcbiAgZ2FyY2hfb3JkZXIgPC0gYXMuaW50ZWdlcihyb3dbXCJHQVJDSG9yZGVyXCJdKVxuICBjb25zdGFudF90ZXJtIDwtIHJvd1tcIkNvbnN0YW50VGVybVwiXVxuICBhcmNoX2NvZWZmIDwtIHJvd1tcIkFSQ0hDb2VmZlwiXVxuICBnYXJjaF9jb2VmZiA8LSByb3dbXCJHQVJDSENvZWZmXCJdXG4gIHN0dWRlbnRfdF9kb2YgPC0gcm93W1wic3R1ZGVudFRfZG9mXCJdXG5cbiAgIyBDcmVhdGUgR0FSQ0ggc3BlY2lmaWNhdGlvblxuICBzcGVjIDwtIHVnYXJjaHNwZWMoXG4gICAgdmFyaWFuY2UubW9kZWwgPSBsaXN0KG1vZGVsID0gaWZlbHNlKGdqcl90cmlnZ2VyLCBcImdqckdBUkNIXCIsIFwic0dBUkNIXCIpLFxuICAgICAgICAgICAgICAgICAgICAgICAgICBnYXJjaE9yZGVyID0gYyhnYXJjaF9vcmRlciwgYXJjaF9vcmRlcikpLFxuICAgIG1lYW4ubW9kZWwgPSBsaXN0KGFybWFPcmRlciA9IGMoMCwgMCksIGluY2x1ZGUubWVhbiA9IFRSVUUpLFxuICAgIGRpc3RyaWJ1dGlvbi5tb2RlbCA9IFwic3RkXCIsXG4gICAgZml4ZWQucGFycyA9IGxpc3QoXG4gICAgICBvbWVnYSA9IGNvbnN0YW50X3Rlcm0sXG4gICAgICBhbHBoYTEgPSBhcmNoX2NvZWZmLFxuICAgICAgYmV0YTEgPSBnYXJjaF9jb2VmZixcbiAgICAgIHNoYXBlID0gc3R1ZGVudF90X2RvZlxuICAgIClcbiAgKVxuXG4gICMgR2VuZXJhdGUgc29tZSByYW5kb20gZGF0YSAoeW91IG1pZ2h0IHdhbnQgdG8gdXNlIHlvdXIgYWN0dWFsIGRhdGEgaGVyZSlcbiAgZGF0YSA8LSBybm9ybSgxMDAwKVxuXG4gICMgRml0IHRoZSBtb2RlbFxuICBmaXQgPC0gdHJ5KHVnYXJjaGZpdChzcGVjLCBkYXRhLCBzb2x2ZXIgPSBcImh5YnJpZFwiKSwgc2lsZW50ID0gVFJVRSlcblxuICAjIFJldHVybiBzb21lIHN1bW1hcnkgc3RhdGlzdGljIG9yIGNyaXRlcmlvbiAoZS5nLiwgQUlDKVxuICBpZiAoY2xhc3MoZml0KSA9PSBcInRyeS1lcnJvclwiKSB7XG4gICAgcmV0dXJuKE5BKVxuICB9IGVsc2Uge1xuICAgIHJldHVybihpbmZvY3JpdGVyaWEoZml0KVtcIkFrYWlrZVwiLF0pXG4gIH1cbn1cblxuIyBBcHBseSB0aGUgZnVuY3Rpb24gdG8gZWFjaCByb3cgb2YgdGhlIG1hdHJpeFxucmVzdWx0cyA8LSBhcHBseShtYXQsIDEsIHJ1bl9nYXJjaF9tb2RlbClcblxuIyBBZGQgcmVzdWx0cyB0byB0aGUgb3JpZ2luYWwgbWF0cml4XG5tYXQkR0FSQ0hfQUlDIDwtIHJlc3VsdHNcblxudW5pcXVlKG1hdCRHQVJDSF9BSUMpXG5gYGAifQ== -->
-<pre class="r"><code># Function to run GARCH model for a single row
-run_garch_model &lt;- function(row) {
-  # Extract parameters from the row
-  arch_order &lt;- as.integer(row[&quot;ARCHorder&quot;])
-  garch_order &lt;- as.integer(row[&quot;GARCHorder&quot;])
-  constant_term &lt;- row[&quot;ConstantTerm&quot;]
-  arch_coeff &lt;- row[&quot;ARCHCoeff&quot;]
-  garch_coeff &lt;- row[&quot;GARCHCoeff&quot;]
-  student_t_dof &lt;- row[&quot;studentT_dof&quot;]
-
-  # Create GARCH specification
-  spec &lt;- ugarchspec(
-    variance.model = list(model = ifelse(gjr_trigger, &quot;gjrGARCH&quot;, &quot;sGARCH&quot;),
-                          garchOrder = c(garch_order, arch_order)),
-    mean.model = list(armaOrder = c(0, 0), include.mean = TRUE),
-    distribution.model = &quot;std&quot;,
-    fixed.pars = list(
-      omega = constant_term,
-      alpha1 = arch_coeff,
-      beta1 = garch_coeff,
-      shape = student_t_dof
-    )
-  )
-
-  # Generate some random data (you might want to use your actual data here)
-  data &lt;- rnorm(1000)
-
-  # Fit the model
-  fit &lt;- try(ugarchfit(spec, data, solver = &quot;hybrid&quot;), silent = TRUE)
-
-  # Return some summary statistic or criterion (e.g., AIC)
-  if (class(fit) == &quot;try-error&quot;) {
-    return(NA)
-  } else {
-    return(infocriteria(fit)[&quot;Akaike&quot;,])
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxubW9kZWwgPC0gZnVuY3Rpb24oTjAsIGxhbWJkYXMsIHQgPSAxKSB7XG4gIG4gPC0gbGVuZ3RoKGxhbWJkYXMpXG4gIG91dCA8LSBudW1lcmljKG4pICAjIEluaXRpYWxpemUgYSBudW1lcmljIHZlY3RvciB0byBzdG9yZSB0aGUgcmVzdWx0c1xuICBmb3IgKGogaW4gMTpuKSB7XG4gICAgb3V0W2pdIDwtIGJhdGVtYW5fZXF1YXRpb24oTjAsIGxhbWJkYXNbMTpqXSwgdClcbiAgfVxuICByZXR1cm4ob3V0KVxufVxuYGBgIn0= -->
+<pre class="r"><code>model &lt;- function(N0, lambdas, t = 1) {
+  n &lt;- length(lambdas)
+  out &lt;- numeric(n)  # Initialize a numeric vector to store the results
+  for (j in 1:n) {
+    out[j] &lt;- bateman_equation(N0, lambdas[1:j], t)
   }
+  return(out)
+}</code></pre>
+<!-- rnb-source-end -->
+<!-- rnb-chunk-end -->
+<!-- rnb-text-begin -->
+<div id="sensitivity-analysis" class="section level3">
+<h3>Sensitivity Analysis</h3>
+<p>Now the sensitivity analysis is performed on the Bateman equation.
+The sensitivity analysis is performed using the Sobol’ method, which is
+a variance-based method that decomposes the variance of the output into
+contributions from each input parameter and their interactions.</p>
+<p>Our goal is to compute the first and total sensitivity indices for a
+decay chain of 3, 5, and then 7 decay constants to compare the results.
+Obviously, in order to make consistent comparison, the sensitivity
+analysis parameters must be equal for each iteration.</p>
+<p>In particular, the lambdas are sampled from a <span class="math inline">\(\mathcal{U} \sim [0, 1]\)</span>.</p>
+<p>The SA parameters are defined:</p>
+<!-- rnb-text-end -->
+<!-- rnb-chunk-begin -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuTiA8LSAyXjEyICMgTnVtYmVyIG9mIHNhbXBsZXMgXG5SIDwtIDEwMCBcbmludGVydmFsIDwtIGMoYygwLjEsIDAuOTkpLCBjKDAuMSwgMC45OSksIGMoMC4xLCAwLjk5KSkgIyBOb3QgdXNlZFxudHlwZSA8LSBcIm5vcm1cIjsgY29uZiA8LSAwLjUwXG5uYW1lUGFyYW1zIDwtIHBhc3RlKFwizrtcIiwgMTpsZW5ndGgobGFtYmRhcyksIHNlcCA9IFwiXCIpXG5gYGAifQ== -->
+<pre class="r"><code>N &lt;- 2^12 # Number of samples 
+R &lt;- 100 
+interval &lt;- c(c(0.1, 0.99), c(0.1, 0.99), c(0.1, 0.99)) # Not used
+type &lt;- &quot;norm&quot;; conf &lt;- 0.50
+nameParams &lt;- paste(&quot;λ&quot;, 1:length(lambdas), sep = &quot;&quot;)</code></pre>
+<!-- rnb-source-end -->
+<!-- rnb-chunk-end -->
+<!-- rnb-text-begin -->
+<p>The design matrix is created, with each parameter (i.e., the lambdas,
+sampled from a uniform distribution, see <code>type = &quot;R&quot;</code>):</p>
+<!-- rnb-text-end -->
+<!-- rnb-chunk-begin -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuZGVzaWduX21hdHJpeCA8LSBzb2JvbF9tYXRyaWNlcyhOID0gTiwgcGFyYW1zID0gbmFtZVBhcmFtcywgdHlwZSA9IFwiUlwiKVxuXG5yb3VuZChhcHBseShyb3VuZChkZXNpZ25fbWF0cml4LCAzKSwgMiwgbWVhbiksIDQpXG5gYGAifQ== -->
+<pre class="r"><code>design_matrix &lt;- sobol_matrices(N = N, params = nameParams, type = &quot;R&quot;)
+
+round(apply(round(design_matrix, 3), 2, mean), 4)</code></pre>
+<!-- rnb-source-end -->
+<!-- rnb-output-begin eyJkYXRhIjoiICAgIM67MSAgICAgzrsyICAgICDOuzMgXG4wLjQ5NzMgMC41MDIwIDAuNDk1MiBcbiJ9 -->
+<pre><code>    λ1     λ2     λ3 
+0.4973 0.5020 0.4952 </code></pre>
+<!-- rnb-output-end -->
+<!-- rnb-chunk-end -->
+<!-- rnb-text-begin -->
+<p>The output shows the mean of each lambda, which are close to 0.5, as
+expected.</p>
+<p>Now the Bateman equation is applied to each row, representing each
+experiment:</p>
+<!-- rnb-text-end -->
+<!-- rnb-chunk-begin -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuIyBJbml0aWFsaXplIGEgbnVtZXJpYyB2ZWN0b3IgdG8gc3RvcmUgdGhlIHJlc3VsdHNcbnJlc3VsdHNfYmF0ZW1hbiA8LSBudW1lcmljKG5yb3coZGVzaWduX21hdHJpeCkpXG5cbiMgTG9vcCB0aHJvdWdoIGVhY2ggcm93IGFuZCBhcHBseSB0aGUgYmF0ZW1hbl9lcXVhdGlvbiBmdW5jdGlvblxuZm9yICh4IGluIDE6bnJvdyhkZXNpZ25fbWF0cml4KSkge1xuICByZXN1bHRzX2JhdGVtYW5beF0gPC0gYmF0ZW1hbl9lcXVhdGlvbigxLCBhcy5udW1lcmljKGRlc2lnbl9tYXRyaXhbeCwgXSksIHQgPSAxKVxufVxuXG5pbmQgPC0gc29ib2xfaW5kaWNlcyhZID0gcmVzdWx0c19iYXRlbWFuLCBOID0gTiwgcGFyYW1zID0gbmFtZVBhcmFtcywgYm9vdCA9IFRSVUUsIFIgPSBSLCB0eXBlID0gdHlwZSwgY29uZiA9IGNvbmYpXG5cbnBsb3QoaW5kKVxuYGBgIn0= -->
+<pre class="r"><code># Initialize a numeric vector to store the results
+results_bateman &lt;- numeric(nrow(design_matrix))
+
+# Loop through each row and apply the bateman_equation function
+for (x in 1:nrow(design_matrix)) {
+  results_bateman[x] &lt;- bateman_equation(1, as.numeric(design_matrix[x, ]), t = 1)
 }
 
-# Apply the function to each row of the matrix
-results &lt;- apply(mat, 1, run_garch_model)
+ind &lt;- sobol_indices(Y = results_bateman, N = N, params = nameParams, boot = TRUE, R = R, type = type, conf = conf)
 
-# Add results to the original matrix
-mat$GARCH_AIC &lt;- results
-
-unique(mat$GARCH_AIC)</code></pre>
+plot(ind)</code></pre>
 <!-- rnb-source-end -->
+<!-- rnb-plot-begin eyJoZWlnaHQiOjQzMi42MzI5LCJ3aWR0aCI6NzAwLCJzaXplX2JlaGF2aW9yIjowLCJjb25kaXRpb25zIjpbXX0= -->
+<p><img src="data:image/png;base64,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" /></p>
+<!-- rnb-plot-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
+<p>The plot shows the indices for each lambda (chain). As expected, the
+<span class="math inline">\(S_i\)</span> is smaller than the <span class="math inline">\(T_i\)</span>, being the total sensitivity index
+the sum of the first-order and all higher-order indices.</p>
+<p>The interval bands around the indices represent the confidence
+interval, which is set to 0.50 in this case. Try to increase it.</p>
+<p>The SA indices are now computed for 5 and 7 lambdas.</p>
+</div>
+<div id="sa-with-5-chains" class="section level3">
+<h3>SA with 5 chains</h3>
+<!-- rnb-text-end -->
+<!-- rnb-chunk-begin -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuTiA8LSAyXjEyOyBSIDwtIDEwMFxuaW50ZXJ2YWwgPC0gYyhjKDAuMSwgMC45OSksIGMoMC4xLCAwLjk5KSwgYygwLjEsIDAuOTkpKSAjIE5vdCB1c2VkXG50eXBlIDwtIFwibm9ybVwiOyBjb25mIDwtIDAuNTBcbm5hbWVQYXJhbXMgPC0gcGFzdGUoXCLOu1wiLCAxOmxlbmd0aChsYW1iZGFzKSwgc2VwID0gXCJcIilcblxuZGVzaWduX21hdHJpeCA8LSBzb2JvbF9tYXRyaWNlcyhOID0gTiwgcGFyYW1zID0gbmFtZVBhcmFtcywgdHlwZSA9IFwiUlwiKVxuXG4jIEluaXRpYWxpemUgYSBudW1lcmljIHZlY3RvciB0byBzdG9yZSB0aGUgcmVzdWx0c1xucmVzdWx0c19iYXRlbWFuIDwtIG51bWVyaWMobnJvdyhkZXNpZ25fbWF0cml4KSlcblxuIyBMb29wIHRocm91Z2ggZWFjaCByb3cgYW5kIGFwcGx5IHRoZSBiYXRlbWFuX2VxdWF0aW9uIGZ1bmN0aW9uXG5mb3IgKHggaW4gMTpucm93KGRlc2lnbl9tYXRyaXgpKSB7XG4gIHJlc3VsdHNfYmF0ZW1hblt4XSA8LSBiYXRlbWFuX2VxdWF0aW9uKDEsIGFzLm51bWVyaWMoZGVzaWduX21hdHJpeFt4LCBdKSwgdCA9IDEpXG59XG5cbmluZCA8LSBzb2JvbF9pbmRpY2VzKFkgPSByZXN1bHRzX2JhdGVtYW4sIE4gPSBOLCBwYXJhbXMgPSBuYW1lUGFyYW1zLCBib290ID0gVFJVRSwgUiA9IFIsIHR5cGUgPSB0eXBlLCBjb25mID0gY29uZilcblxucGxvdChpbmQpXG5gYGAifQ== -->
+<pre class="r"><code>N &lt;- 2^12; R &lt;- 100
+interval &lt;- c(c(0.1, 0.99), c(0.1, 0.99), c(0.1, 0.99)) # Not used
+type &lt;- &quot;norm&quot;; conf &lt;- 0.50
+nameParams &lt;- paste(&quot;λ&quot;, 1:length(lambdas), sep = &quot;&quot;)
+
+design_matrix &lt;- sobol_matrices(N = N, params = nameParams, type = &quot;R&quot;)
+
+# Initialize a numeric vector to store the results
+results_bateman &lt;- numeric(nrow(design_matrix))
+
+# Loop through each row and apply the bateman_equation function
+for (x in 1:nrow(design_matrix)) {
+  results_bateman[x] &lt;- bateman_equation(1, as.numeric(design_matrix[x, ]), t = 1)
+}
+
+ind &lt;- sobol_indices(Y = results_bateman, N = N, params = nameParams, boot = TRUE, R = R, type = type, conf = conf)
+
+plot(ind)</code></pre>
+<!-- rnb-source-end -->
+<!-- rnb-plot-begin eyJoZWlnaHQiOjQzMi42MzI5LCJ3aWR0aCI6NzAwLCJzaXplX2JlaGF2aW9yIjowLCJjb25kaXRpb25zIjpbXX0= -->
+<p><img src="data:image/png;base64,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" /></p>
+<!-- rnb-plot-end -->
+<!-- rnb-chunk-end -->
+<!-- rnb-text-begin -->
+</div>
+<div id="sa-with-7-chains" class="section level3">
+<h3>SA with 7 chains</h3>
+<!-- rnb-text-end -->
+<!-- rnb-chunk-begin -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuTiA8LSAyXjEyOyBSIDwtIDEwMFxuaW50ZXJ2YWwgPC0gYyhjKDAuMSwgMC45OSksIGMoMC4xLCAwLjk5KSwgYygwLjEsIDAuOTkpKSAjIE5vdCB1c2VkXG50eXBlIDwtIFwibm9ybVwiOyBjb25mIDwtIDAuNTBcbm5hbWVQYXJhbXMgPC0gcGFzdGUoXCLOu1wiLCAxOmxlbmd0aChsYW1iZGFzKSwgc2VwID0gXCJcIilcblxuZGVzaWduX21hdHJpeCA8LSBzb2JvbF9tYXRyaWNlcyhOID0gTiwgcGFyYW1zID0gbmFtZVBhcmFtcywgdHlwZSA9IFwiUlwiKVxuXG4jIEluaXRpYWxpemUgYSBudW1lcmljIHZlY3RvciB0byBzdG9yZSB0aGUgcmVzdWx0c1xucmVzdWx0c19iYXRlbWFuIDwtIG51bWVyaWMobnJvdyhkZXNpZ25fbWF0cml4KSlcblxuIyBMb29wIHRocm91Z2ggZWFjaCByb3cgYW5kIGFwcGx5IHRoZSBiYXRlbWFuX2VxdWF0aW9uIGZ1bmN0aW9uXG5mb3IgKHggaW4gMTpucm93KGRlc2lnbl9tYXRyaXgpKSB7XG4gIHJlc3VsdHNfYmF0ZW1hblt4XSA8LSBiYXRlbWFuX2VxdWF0aW9uKDEsIGFzLm51bWVyaWMoZGVzaWduX21hdHJpeFt4LCBdKSwgdCA9IDEpXG59XG5cbmluZCA8LSBzb2JvbF9pbmRpY2VzKFkgPSByZXN1bHRzX2JhdGVtYW4sIE4gPSBOLCBwYXJhbXMgPSBuYW1lUGFyYW1zLCBib290ID0gVFJVRSwgUiA9IFIsIHR5cGUgPSB0eXBlLCBjb25mID0gY29uZilcblxucGxvdChpbmQpXG5gYGAifQ== -->
+<pre class="r"><code>N &lt;- 2^12; R &lt;- 100
+interval &lt;- c(c(0.1, 0.99), c(0.1, 0.99), c(0.1, 0.99)) # Not used
+type &lt;- &quot;norm&quot;; conf &lt;- 0.50
+nameParams &lt;- paste(&quot;λ&quot;, 1:length(lambdas), sep = &quot;&quot;)
+
+design_matrix &lt;- sobol_matrices(N = N, params = nameParams, type = &quot;R&quot;)
+
+# Initialize a numeric vector to store the results
+results_bateman &lt;- numeric(nrow(design_matrix))
+
+# Loop through each row and apply the bateman_equation function
+for (x in 1:nrow(design_matrix)) {
+  results_bateman[x] &lt;- bateman_equation(1, as.numeric(design_matrix[x, ]), t = 1)
+}
+
+ind &lt;- sobol_indices(Y = results_bateman, N = N, params = nameParams, boot = TRUE, R = R, type = type, conf = conf)
+
+plot(ind)</code></pre>
+<!-- rnb-source-end -->
+<!-- rnb-plot-begin eyJoZWlnaHQiOjQzMi42MzI5LCJ3aWR0aCI6NzAwLCJzaXplX2JlaGF2aW9yIjowLCJjb25kaXRpb25zIjpbXX0= -->
+<p><img src="data:image/png;base64,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" /></p>
+<!-- rnb-plot-end -->
+<!-- rnb-chunk-end -->
+<!-- rnb-text-begin -->
+<p>The last chain has both Si and Ti equal to 0, meaning the decay
+already happens at the previous steps.</p>
 <!-- rnb-text-end -->
 </div>
 </div>
 
-<div id="rmd-source-code">LS0tDQp0aXRsZTogIlVzZSBvZiBUcmlnZ2VycyBmb3IgTU9NUDogYSB0dXRvcmlhbCINCm91dHB1dDogaHRtbF9ub3RlYm9vaw0KLS0tDQoNCkFzIGFscmVhZHkga25vd24gZnJvbSB0aGUgcHJldmlvdXMgbm90ZWJvb2tzLCAqZ2xvYmFsIHNlbnNpdGl2aXR5IGFuYWx5c2lzKiBleGFtaW5lcyB0aGUgbW9kZWwgb3V0cHV0IHNlbnNpdGl2aXR5IHdoZW4gdmFyeWluZyBhbGwgdW5jZXJ0YWluIGlucHV0cyAqc2ltdWx0YW5lb3VzbHkqIGFjcm9zcyB0aGVpciBlbnRpcmUgdmFsdWUgcmFuZ2UuIA0KDQpBbiBleHRlbnNpb24gb2YgR1NBIGNhbiBiZSBwZXJmb3JtZWQgb24gc2FtcGxlIGFzc3VtcHRpb25zIG1hZGUgaW4gdGhlIGNvdXJzZSBvZiBhIHNwZWNpZmljIGFuYWx5c2lzLCBzaW11bGF0aW5nIGFuIGFuYWx5c2lzIGRvbmUgYnkgbXVsdGlwbGUgdGVhbXMvcmVzZWFyY2hlcnMgdGFja2xpbmcgdGhlIHNhbWUgKHVuc3BlY2lmaWVkKSBwcm9ibGVtLg0KDQpBICpyb2J1c3RpZmljYXRpb24qIGlzIGhlbmNlIHBlcmZvcm1lZCBieSB2YXJ5aW5nIGFzc3VtcHRpb25zIHNvIHRoYXQgYW4gVW5jZXJ0YWludHkgQW5hbHlzaXMgKFVBKSBhbmQgU2Vuc2l0aXZpdHkgQW5hbHlzaXMgKFNBKSBjYW4gYmUgcGVyZm9ybWVkIG9uIHRoZXNlIHZhcmlhdGlvbnMuIFRoaXMgaXMgZXNzZW50aWFsbHkgd2hhdCAqTW9kZWxsaW5nIG9mIHRoZSBNb2RlbGxpbmcgUHJvY2VzcyogaXMuDQoNClRoZSBNT01QIGNhbiBiZSBwZXJmb3JtZWQgaW4gYSBNb250ZWNhcmxvIGZyYW1ld29yaywgYnkgZGVmaW5pbmcgcmFuZG9tIHRyaWdnZXJzIHRoYXQgZGV0ZXJtaW5lIHRoZSBtb2RlbCB0byBiZSBmb2xsb3dlZCBpbiBlYWNoIHNpbXVsYXRpb24uIEluIHRoaXMgd2F5LCBwcmVkaWN0aW9ucyBhcmUgY29tYmluZWQgZnJvbSB0aGVzZSBtb2RlbHMgd2hpbGUgYWNjb3VudGluZyBzaW11bHRhbmVvdXNseSBmb3IgdGhlIHVuY2VydGFpbnR5IGFzc29jaWF0ZWQgd2l0aCBlYWNoIG1vZGVsJ3MgcGFyYW1ldGVycy4gUmFuZG9tIHRyaWdnZXJzIGNhbiBiZSB0aGVuIGNvbnNpZGVyZWQgYXMgc291cmNlIG9mIGFkZGVkIHVuY2VydGFpbnR5Lg0KDQpBdCBlYWNoIGl0ZXJhdGlvbiBjb21iaW5hdGlvbiBvZiB0cmlnZ2VycywgdGhlc2UgYXJlIHNhbXBsZWQgcmFuZG9tbHkgaW4gYW4gaW5kZXBlbmRlbnQgd2F5LCBsZWFkaW5nIHRvIGEgZGlmZmVyZW50IGlkZW50aWZpYWJsZSBtb2RlbC4NCg0KDQojIyBDb2RpbmcsIHNldHRpbmcgdXAgdGhlIGdsb2JhbCBlbnZpcm9ubWVudDoNCmBgYHtyIG1lc3NhZ2U9RkFMU0UsIHdhcm5pbmc9RkFMU0UsIGluY2x1ZGU9RkFMU0V9DQppbnN0YWxsX2FuZF9sb2FkIDwtIGZ1bmN0aW9uKHBhY2thZ2VzKSB7DQogICMgQ2hlY2sgZm9yIG1pc3NpbmcgcGFja2FnZXMNCiAgbmV3X3BhY2thZ2VzIDwtIHBhY2thZ2VzWyEocGFja2FnZXMgJWluJSBpbnN0YWxsZWQucGFja2FnZXMoKVssIlBhY2thZ2UiXSldDQogIA0KICAjIEluc3RhbGwgbWlzc2luZyBwYWNrYWdlcw0KICBpZihsZW5ndGgobmV3X3BhY2thZ2VzKSkgew0KICAgIG1lc3NhZ2UoIkluc3RhbGxpbmcgcGFja2FnZXM6ICIsIHBhc3RlKG5ld19wYWNrYWdlcywgY29sbGFwc2UgPSAiLCAiKSkNCiAgICBpbnN0YWxsLnBhY2thZ2VzKG5ld19wYWNrYWdlcywgZGVwZW5kZW5jaWVzID0gVFJVRSkNCiAgfQ0KICANCiAgIyBMb2FkIGFsbCBwYWNrYWdlcw0KICBsb2FkZWRfcGFja2FnZXMgPC0gY2hhcmFjdGVyKCkNCiAgZm9yKHBrZyBpbiBwYWNrYWdlcykgew0KICAgIGlmKCFyZXF1aXJlKHBrZywgY2hhcmFjdGVyLm9ubHkgPSBUUlVFLCBxdWlldGx5ID0gVFJVRSkpIHsNCiAgICAgIHdhcm5pbmcoIkZhaWxlZCB0byBsb2FkIHBhY2thZ2U6ICIsIHBrZykNCiAgICB9IGVsc2Ugew0KICAgICAgbG9hZGVkX3BhY2thZ2VzIDwtIGMobG9hZGVkX3BhY2thZ2VzLCBwa2cpDQogICAgfQ0KICB9DQogIA0KICAjIFJlcG9ydCByZXN1bHRzDQogIGlmKGxlbmd0aChsb2FkZWRfcGFja2FnZXMpID4gMCkgew0KICAgIG1lc3NhZ2UoIlN1Y2Nlc3NmdWxseSBsb2FkZWQgcGFja2FnZXM6ICIsIHBhc3RlKGxvYWRlZF9wYWNrYWdlcywgY29sbGFwc2UgPSAiLCAiKSkNCiAgfQ0KICBpZihsZW5ndGgobG9hZGVkX3BhY2thZ2VzKSA8IGxlbmd0aChwYWNrYWdlcykpIHsNCiAgICBtaXNzaW5nIDwtIHNldGRpZmYocGFja2FnZXMsIGxvYWRlZF9wYWNrYWdlcykNCiAgICB3YXJuaW5nKCJGYWlsZWQgdG8gbG9hZCBwYWNrYWdlczogIiwgcGFzdGUobWlzc2luZywgY29sbGFwc2UgPSAiLCAiKSkNCiAgfQ0KfQ0KDQppbnN0YWxsX2FuZF9sb2FkKGMoDQogICAgICAgICAgICAgICAgInRpYmJsZSIsDQogICAgICAgICAgICAgICAgInNlbnNvYm9sIiwNCiAgICAgICAgICAgICAgICAiZ2dwbG90MiIsDQogICAgICAgICAgICAgICAgInRpZHl2ZXJzZSIsDQogICAgICAgICAgICAgICAgImRhdGEudGFibGUiLA0KICAgICAgICAgICAgICAgICJncmlkRXh0cmEiLA0KICAgICAgICAgICAgICAgICJydWdhcmNoIiwNCiAgICAgICAgICAgICAgICAicXVhbnRtb2QiLA0KICAgICAgICAgICAgICAgICJtaWNyb2JlbmNobWFyayINCiAgICAgICAgICAgICAgICApKQ0KYGBgDQoNCkVuc3VyZSByZXByb2R1Y2liaWxpdHkgYnkgc2V0dGluZyBhIHNlZWQ6DQpgYGB7cn0NCnNldC5zZWVkKDEwMCkNCmBgYA0KDQpEZWZpbmUgdGhlIGNvbW1vbiBwYXJhbWV0ZXJzIG9mIGludGVyZXN0IGZvciBvdXIgc2Vuc2l0aXZpdHkgYW5hbHlzaXM6DQpgYGB7cn0NCk4gPC0gMl4xMTsgIyBOdW1iZXIgb2Ygc2FtcGxlcw0KDQpmaXJzdCA8LSAic2FsdGVsbGkiDQp0b3RhbCA8LSAiamFuc2VuIg0KIyBTcGVjaWZ5IHRoZSB0eXBlIG9mIHNlbnNpdGl2aXR5IGluZGljZXMgZm9yIHRoZSBmdW5jdGlvbiAic29ib2xfaW5kaWNlcyIuDQojICJzYWx0ZWxsaSIgZm9yIGZpcnN0LW9yZGVyIGVmZmVjdHMgYW5kICJqYW5zZW4iIGZvciB0b3RhbC1vcmRlciBlZmZlY3RzIGFyZSB0aGUgZGVmYXVsdCBjaG9pY2VzIGZvciB0aGUgc2Vuc29ib2wgZnVuY3Rpb24uDQoNClI8LTEwXjMgIyBOdW1iZXIgb2YgcmVwbGljYXRpb25zIGJvb3RzdHJhcA0KYGBgDQoNClRoZSBmaXJzdC1vcmRlciBzZW5zaXRpdml0eSBpbmRleCAkU19pJCAiKnNhbHRlbGxpKiIgaXMgY2FsY3VsYXRlZCBhczoNCg0KJCRcZnJhY3tcZnJhY3sxfXtOfSBcc3VtX3t2PTF9XntOfSBmKFxtYXRoYmZ7Qn0pX3YgXGxlZnRbIGZcbGVmdCggXG1hdGhiZntBfV97XG1hdGhiZntCfX1eeyhpKX0gXHJpZ2h0KV92IC0gZihcbWF0aGJme0F9KV92IFxyaWdodF19e1YoeSl9JCQNCg0KVGhlIHRvdGFsLW9yZGVyIHNlbnNpdGl2aXR5IGluZGV4ICRUX2kkICIqamFuc2VuKiIgaXMgY2FsY3VsYXRlZCBhczoNCg0KJCRcZnJhY3tcZnJhY3sxfXsyTn0gXHN1bV97dj0xfV57Tn0gXGxlZnRbIGYoXG1hdGhiZntBfSlfdiAtIGZcbGVmdCggXG1hdGhiZntBfV97XG1hdGhiZntCfX1eeyhpKX0gXHJpZ2h0KV92IFxyaWdodF1eMn17Vih5KX0kJA0KQm90aCBmb3JtdWxhcyBjb21lIGZyb20gW1NhbHRlbGxpIGV0IGFsLiAoMjAxMCldKGh0dHBzOi8vd3d3LnNjaWVuY2VkaXJlY3QuY29tL3NjaWVuY2UvYXJ0aWNsZS9waWkvUzAwMTA0NjU1MDkwMDMwODcpLg0KDQoNCi0tLQ0KDQojIEV4YW1wbGUgMTogVXNlIG9mIHRyaWdnZXJzIGluIGEgU29ib2wnIEcgRnVuY3Rpb24sIGFic29sdXRlIHZhbHVlcyB2cyBubyBhYnNvbHV0ZSB2YWx1ZXMNCg0KVG8gcHJvY2VlZCBzdGVwLWJ5LXN0ZXAsIGEgc2ltcGxlIGV4YW1wbGUgb2YgTU9NUCB1c2luZyB0cmlnZ2VycyBvbiB0aGUgU29ib2wgRnVuY3Rpb24gaXMgcGVyZm9ybWVkLCB3aXRoIGEgc2xpZ2h0IG1vZGlmaWNhdGlvbi4gQXMgd2UgYWxyZWFkeSBrbm93IGZyb20gdGhlIHByZXZpb3VzIG5vdGVib29rLCB0aGUgU29ib2wnIEcgRnVuY3Rpb24gaXMgYSBiZW5jaG1hcmsgZnVuY3Rpb24gZm9yIGdsb2JhbCBzZW5zaXRpdml0eSBhbmFseXNpcy4gVGhlIGZ1bmN0aW9uIGlzIGRlZmluZWQgYXMgZm9sbG93czoNCg0KJCQgWSA9IFxwcm9kX3tpID0gMX1eayBcZnJhY3t8NFhfaSAtIDJ8ICsgYV9pfXsxICsgYV9pfSBcXCBrID0gOCBcXCBYX2kgXHNpbSBVWzAsIDFdIFxcIGEgPSAoMCwgMSwgNC41LCA5LCA5OSwgOTksIDk5LCA5OSkgJCQNCi4uLiBidXQgaGVyZSB3aXRoIGEgY2F2ZWF0Lg0KTGV0J3MgaW1hZ2luZSwgaW4gdGhpcyBjb250ZXh0LCB0aGF0IHRoZSByZXNlYXJjaGVyIGRvZXMgbm90IGtub3cgdGhlIGNvcnJlY3Qgc3BlY2lmaWNhdGlvbiwgaXQgaXMgdW5zdXJlIHdoZXRoZXIgdGhlIHRlcm0gJDRYX2kgLSAyJCBpcyBpbiBhYnNvbHV0ZSB2YWx1ZXMgb3Igbm90LiBUcmlnZ2VyIHBlcm1pdHMgdG8gZXhwbG9yZSB0aGUgdW5jZXJ0YWludHkgZm9yIGJvdGggY2FzZXMgc2ltdWx0YW5lb3VzbHkuIERlZmluZWQgYSBiaW5hcnkgY2hvaWNlLCBhdCBlYWNoIGl0ZXJhdGlvbiBvbmUgb2YgdGhlIHR3byBtb2RlbCB3aWxsIGJlIHJhbmRvbWx5IHNlbGVjdGVkIGJldHdlZW4gdGhlIHR3byBvcHRpb25zLg0KDQpXcml0ZSBpbiBjb2RlIHRoZSBTb2JvbCcgRyBGdW5jdGlvbiB3aXRoIHRoZSB0d28gcG9zc2libGUgc3BlY2lmaWNhdGlvbnM6DQpgYGB7cn0NCnNvYm9sX0Z1bl8wIDwtIGZ1bmN0aW9uKFgsIHZlY3Rvcikgew0KICAjIE1vZGVsL2Z1bmN0aW9uIHdpdGggYWJzb2x1dGUgdmFsdWVzDQogIHkgPC0gMQ0KICANCiAgZm9yIChqIGluIDE6bGVuZ3RoKHZlY3RvcikpIHsNCiAgICB5IDwtIHkgKiAoYWJzKDQgKiBYWywgal0gLSAyKSArIHZlY3RvcltqXSkvKDEgKyB2ZWN0b3Jbal0pDQogIH0NCiAgcmV0dXJuKHkpDQp9DQoNCnNvYm9sX0Z1bl8xIDwtIGZ1bmN0aW9uKFgsIHZlY3Rvcikgew0KICAjIE1vZGVsL2Z1bmN0aW9uIHdpdGhvdXQgYWJzb2x1dGUgdmFsdWVzDQogIHkgPC0gMQ0KICANCiAgZm9yIChqIGluIDE6bGVuZ3RoKHZlY3RvcikpIHsNCiAgICB5IDwtIHkgKiAoNCAqIFhbLCBqXSAtIDIgKyB2ZWN0b3Jbal0pLygxICsgdmVjdG9yW2pdKQ0KICB9DQogIHJldHVybih5KQ0KfQ0KYGBgDQoNClRoZSBzcGVjaWZpYyBwYXJhbWV0ZXJzIG9mIHRoZSBTb2JvbCcgRyBGdW5jdGlvbiBhcmUgdGhlbiBkZWZpbmVkLg0KQWdhaW4sIHRoZSAkYV9pJCB2YWx1ZXMgYXJlIGFyYml0cmFyeTsgdGhlIGhpZ2hlciB0aGV5IGFyZSwgdGhlIGxlc3Mgc2Vuc2libGUgdGhlIG91dHB1dCBpcyB0byB0aGUgc3BlY2lmaWMgaW5wdXQuDQpgYGB7cn0NCmFfdmVjdG9yIDwtIGMoMCwgMSwgNC41LCA5LCA5OSwgOTksIDk5LCA5OSkNCg0KayA8LSBsZW5ndGgoYV92ZWN0b3IpICNudW1iZXIgb2YgcGFyYW1ldGVycw0KcGFyYW1zIDwtIGMocGFzdGUoIngiLCAxOmssIHNlcCA9ICIiKSwgInRyaWdnZXIiKSAjIFBhcmFtZXRlcnMgbmFtZXMsIHdpdGggdGhlIHRyaWdnZXINCmBgYA0KDQpBIHNwZWNpZmljIGZ1bmN0aW9uIGlzIGNyZWF0ZWQgaW4gb3JkZXIgdG8gYmUgYXBwbGllZCBvbiBlYWNoIHJvdyBvZiB0aGUgZGVzaWduIG1hdHJpeC4gVGhlIHR3byBkaWZmZXJlbnQgU29ib2wnIEcgRnVuY3Rpb25zIGFyZSB0aGVuIHJ1biBhY2NvcmRpbmcgdG8gdGhlIHRyaWdnZXIgdmFsdWU6DQpgYGB7cn0NCnJ1bl9tb2RlbCA8LSBmdW5jdGlvbihYKSB7DQogIHRyaWdnZXIgPC0gWFsidHJpZ2dlciJdDQogIFhfaW5wdXQgPC0gWFshbmFtZXMoWCkgJWluJSAidHJpZ2dlciJdICAjIFNlbGVjdCBhbGwgY29sdW1ucyBleGNlcHQgInRyaWdnZXIiDQogIA0KICBpZiAodHJpZ2dlciA9PSAwKSB7DQogICAgcmV0dXJuKHNvYm9sX0Z1bl8wKG1hdHJpeChYX2lucHV0LCBucm93PTEpLCBhX3ZlY3RvcikpDQogIH0gZWxzZSB7DQogICAgcmV0dXJuKHNvYm9sX0Z1bl8xKG1hdHJpeChYX2lucHV0LCBucm93PTEpLCBhX3ZlY3RvcikpDQogIH0NCn0NCmBgYA0KDQpUaGUgc2FtcGxlIG1hdHJpeCBpcyBkZWZpbmVkIGFuZCB0aGUgY29sdW1ucyBhcmUgYXBwcm9wcmlhdGVseSB0cmFuc2Zvcm1lZC4gSW4gb3VyIGNhc2UsIHdlIGp1c3QgbmVlZCB0byBkaXNjcmV0aXplIHRoZSAidHJpZ2dlciIgdmFyaWFibGUuDQoNCi0gKiogMDogU29ib2wnIEcgRnVuY3Rpb24gd2l0aCBhYnNvbHV0ZSB2YWx1ZXMgKioNCi0gKiogMTogU29ib2wnIEcgRnVuY3Rpb24gd2l0aG91dCBhYnNvbHV0ZSB2YWx1ZXMgKioNCmBgYHtyfQ0KbWF0IDwtIGRhdGEudGFibGUoc29ib2xfbWF0cmljZXMocGFyYW1zID0gcGFyYW1zLCBOID0gTiwgdHlwZSA9ICJSIikpDQoNCiMgVHJhbnNmb3JtIHRoZSB0cmlnZ2VyIHZhcmlhYmxlIHRvIGJpbmFyeQ0KbWF0WywgdHJpZ2dlciA6PSBpZmVsc2UodHJpZ2dlciA+IDAuNSwgMSwgMCldDQoNCiMgSnVzdCB0byBtYWtlIHN1cmUsIGdpdmVuIHRoYXQgJ3R5cGUgPSAiUiIgJyBwcm92aWRlcyByYW5kb20gdW5pZm9ybVswLDFdIHZhbHVlcyBmb3IgZWFjaCBjb2x1bW4gYW5kIHRoZSB0cmlnZ2VyIHNwbGl0IGlzIGRlZmluZWQgYXQgaXRzIG1lZGlhbiB2YWx1ZSwgd2UgY2FuIGNoZWNrIHRoZSBwZXJjZW50YWdlIG9mIDEncy4NCg0KY2F0KCJUaGUgcmF0aW8gb2YgMSdzIChhY3RpdmUgdHJpZ2dlcnMpIGlzIiwgc3VtKG1hdFssIHRyaWdnZXJdKS9ucm93KG1hdCkpICMgU2hvdWxkIGJlIGFyb3VuZCAwLjUNCmBgYA0KDQpUaGUgb3V0cHV0cyBhcmUgY29tcHV0ZWQgYW5kIHRoZWlyIGRpc3RyaWJ1dGlvbiAoKnVuY2VydGFpbnR5IGFuYWx5c2lzKikgaXMgY29tcHV0ZWQ6DQpgYGB7ciB3YXJuaW5nPUZBTFNFfQ0KIyBDb21wdXRlIG1vZGVsIG91dHB1dHMNCnkgPC0gYXBwbHkobWF0LCAxLCBydW5fbW9kZWwpDQoNCiMgUGxvdCB0aGUgZGlzdHJpYnV0aW9uIG9mIHRoZSBvdXRwdXQgd2l0aCBzZW5zb2JvbCBmdW5jdGlvbg0KcGxvdF91bmNlcnRhaW50eSh5LCBOID0gTikgKyBsYWJzKHRpdGxlID0gIk91dHB1dCBEaXN0cmlidXRpb24gb2YgU29ib2wnIEcgRnVuY3Rpb24gdW5kZXIgdHJpZ2dlciIpDQpgYGANCg0KVGhlIHNhbWUgcGxvdCwgYnV0IHdpdGggaW1wcm92ZWQgdmlzdWFsaXphdGlvbnM6DQpgYGB7cn0NCmltcHJvdmVkU29ib2xUcmlnZ1VBIDwtIGdncGxvdChkYXRhLmZyYW1lKHkpLCBhZXMoeCA9IHkpKSArDQogICAgICAgICAgICAgICAgICAgICAgICBnZW9tX2hpc3RvZ3JhbShiaW5zID0gMzAsIGZpbGwgPSAic3RlZWxibHVlIiwgY29sb3IgPSAiYmxhY2siLCBhbHBoYSA9IDAuNykgKw0KICAgICAgICAgICAgICAgICAgICAgICAgdGhlbWVfbWluaW1hbCgpICsgbGFicyh5ID0gIiIpICsgDQogICAgICAgICAgICAgICAgICAgICAgICB0aGVtZShwbG90LnRpdGxlID0gZWxlbWVudF90ZXh0KGhqdXN0ID0gMC41LCBzaXplID0gMTYsIGZhY2UgPSAiYm9sZCIpLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBheGlzLnRpdGxlID0gZWxlbWVudF90ZXh0KHNpemUgPSAxMiksDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGF4aXMudGV4dCA9IGVsZW1lbnRfdGV4dChzaXplID0gMTApKQ0KDQppbXByb3ZlZFNvYm9sVHJpZ2dVQSArIGxhYnModGl0bGUgPSAiT3V0cHV0IERpc3RyaWJ1dGlvbiBvZiBUcmlnZ2VyZWQgU29ib2wnIEcgRnVuY3Rpb25zIiwNCiAgICAgICAgICAgICAgICAgICAgICAgeCA9ICJZIiwgeSA9ICIiKQ0KYGBgDQpUaGUgc2Vuc2l0aXZpdHkgaW5kaWNlcyBhcmUgY29tcHV0ZWQgYW5kIHRoZW4gcGxvdHRlZCwgYWdhaW4gd2l0aCB0aGUgYHNlbnNvYm9sYCBwYWNrYWdlOg0KYGBge3J9DQojIENvbXB1dGUgc2Vuc2l0aXZpdHkgaW5kaWNlcw0KaW5kIDwtIHNlbnNvYm9sOjpzb2JvbF9pbmRpY2VzKFkgPSB5LCBOID0gTiwgcGFyYW1zID0gcGFyYW1zLCBmaXJzdCA9IGZpcnN0LCB0b3RhbCA9IHRvdGFsLCBib290ID0gVFJVRSwgUiA9IFIpDQpgYGANCg0KQSB0YWJsZSBpcyBkaXNwbGF5ZWQgd2l0aCBhbGwgdGhlIHJlbGV2YW50IGNhbGN1bGF0ZWQgbWVhc3VyZXM6DQpgYGB7cn0NCmluZA0KYGBgDQoNClRvIGltcHJvdmUgdGhlIHRhYmxlIHZpc3VhbGl6YXRpb24sIHdlIGZpbHRlciBieSBgU2lgIGFuZCBgVGlgIGFuZCBzZXQgdGhlIG51bWJlciBvZiBkZWNpbWFsIGRpZ2l0cyBpbiBlYWNoIG51bWVyaWNhbCBjb2x1bW4gdG8gNToNCg0KLSBGaXJzdC1vcmRlciBTaToNCmBgYHtyfQ0KYXMuZGF0YS5mcmFtZShpbmRbMV0pICU+JSANCiAgICBtdXRhdGUoYWNyb3NzKDE6NSwgfnJvdW5kKC4sIDUpKSkgJT4lDQogICAgZmlsdGVyKHJlc3VsdHMuc2Vuc2l0aXZpdHkgPT0gIlNpIikNCmBgYA0KDQotIFRvdGFsLW9yZGVyIFRpOg0KYGBge3J9DQphcy5kYXRhLmZyYW1lKGluZFsxXSkgJT4lIA0KICAgIG11dGF0ZShhY3Jvc3MoMTo1LCB+cm91bmQoLiwgNSkpKSAlPiUNCiAgICBmaWx0ZXIocmVzdWx0cy5zZW5zaXRpdml0eSA9PSAiVGkiKQ0KYGBgDQoNCmBgYHtyfQ0KcGxvdChpbmQpICsgbGFicyh0aXRsZSA9ICJTb2JvbCcgRyBGdW5jdGlvbiB1bmRlciB0cmlnZ2VyIikgKyB0aGVtZShsZWdlbmQucG9zaXRpb24gPSAicmlnaHQiKQ0KYGBgDQpUaGlzIGlzIHRoZSBiZXN0IHdheSB0byB2aXN1YWxpemUgYW5kIGFzc2VzcyB0aGUgcmVzdWx0cywgaW4gdGhpcyBjYXNlIHdpdGggdGhlIHVzZSBvZiB0cmlnZ2Vycy4gDQoNClRoZSB0cmlnZ2VyIGhhcyB0aGUgbW9zdCBpbXBvcnRhbnQgcm9sZSBpbiBkZWZpbmluZyB0aGUgb3V0cHV0LiBUaGlzIGlzIHN1Z2dlc3RlZCAtIHJlY2FsbGluZyB0aGUgVUEgLSBieSB0aGUgZmFjdCB0aGF0IHRoZSBvdXRwdXQgZG9tYWluIHRoZSBvdXRwdXQgZG9tYWluIGV4dGVuZHMgaW50byB0aGUgbmVnYXRpdmUgcmFuZ2UuDQoNCldlIGNhbiBjb21wYXJlIHRoZXNlIGluZGljZXMgd2l0aCB0aGUgb3JpZ2luYWwgU29ib2wgRycgRnVuY3Rpb24gaW5kaWNlcy4NCg0KQ29tcGFyaXNvbjogU2luZ2xlIE9yaWdpbmFsIFNvYm9sJyBHIEZ1bmN0aW9uIHZzIFRyaWdnZXJlZA0KDQpDcmVhdGUgdGhlIHNhbWUgZGVzaWduIG1hdHJpeCwgd2l0aG91dCB0aGUgdHJpZ2dlciBjb2x1bW5zLCBhbmQgY29tcHV0ZSB0aGUgcmVzdWx0czoNCmBgYHtyfQ0KcGFyYW1zIDwtIHBhc3RlKCJ4IiwgMTprLCBzZXAgPSAiIikgIyByZW1lbWJlciBrIGlzIHRoZSBsZW5ndGggb2YgYV92ZWN0b3INCg0KbWF0MSA8LSBkYXRhLnRhYmxlKHNvYm9sX21hdHJpY2VzKHBhcmFtcyA9IHBhcmFtcywgTiA9IE4sIHR5cGUgPSAiUiIpKQ0KeTEgPC0gc29ib2xfRnVuXzAoYXMubWF0cml4KG1hdDEpLCBhX3ZlY3RvcikNCmluZDEgPC0gc29ib2xfaW5kaWNlcyhZID0geTEsIE4gPSBOLCBwYXJhbXMgPSBwYXJhbXMsIGZpcnN0ID0gZmlyc3QsIHRvdGFsID0gdG90YWwsIGJvb3QgPSBUUlVFLCBSID0gUikNCg0KIyBEZWZpbmUgdGhlIGltcHJvdmVkIHVuY2VydGFpbnR5IHBsb3Qgd2l0aG91dCBydW5uaW5nIGl0Og0KDQppbXByb3ZlZFNvYm9sVUEgPC0gZ2dwbG90KGRhdGEuZnJhbWUoeTEpLCBhZXMoeCA9IHkxKSkgKw0KICAgICAgICAgICAgICAgICAgZ2VvbV9oaXN0b2dyYW0oYmlucyA9IDMwLCBmaWxsID0gInN0ZWVsYmx1ZSIsIGNvbG9yID0gImJsYWNrIiwgYWxwaGEgPSAwLjcpICsNCiAgICAgICAgICAgICAgICAgIHRoZW1lX21pbmltYWwoKSArIGxhYnMoeSA9ICIiKSArIA0KICAgICAgICAgICAgICAgICAgdGhlbWUocGxvdC50aXRsZSA9IGVsZW1lbnRfdGV4dChoanVzdCA9IDAuNSwgc2l6ZSA9IDE2LCBmYWNlID0gImJvbGQiKSwNCiAgICAgICAgICAgICAgICAgICAgICAgIGF4aXMudGl0bGUgPSBlbGVtZW50X3RleHQoc2l6ZSA9IDEyKSwNCiAgICAgICAgICAgICAgICAgICAgICAgIGF4aXMudGV4dCA9IGVsZW1lbnRfdGV4dChzaXplID0gMTApDQogICAgICAgICAgICAgICAgICApDQpgYGANCg0KVGhlIHVuY2VydGFpbnR5IGFuYWx5c2lzIGZvciB0aGUgb3JpZ2luYWwgU29ib2wgRycgRnVuY3Rpb24gaXMgcGVyZm9ybWVkLCBhbmQgY29tcGFyZWQgd2l0aCB0aGUgdHJpZ2dlcmVkIG9uZToNCmBgYHtyfQ0KIyBEZWZpbmUgbXVsdGlwbGUgcGxvdHRpbmc6IDEgcm93IDIgY29sdW1ucw0KZ3JpZC5hcnJhbmdlKGltcHJvdmVkU29ib2xVQSArIGxhYnModGl0bGUgPSAiVUEgT3JpZ2luYWwgU29ib2wnIEciKSAsDQogICAgICAgICAgICAgaW1wcm92ZWRTb2JvbFRyaWdnVUEgKyBsYWJzKHRpdGxlID0gIlVBIFRyaWdnZXJlZCBTb2JvbCcgRyIpLA0KICAgICAgICAgICAgIG5yb3cgPSAxKQ0KYGBgDQpUaGUgb3V0cHV0IGRpc3RyaWJ1dGlvbiBpcywgaW4gdGhlIHRyaWdnZXJlZCBjYXNlLCBtb3JlIHNwcmVhZCBvdXQgYXMgZXhwZWN0ZWQuIFRoaXMgaXMgYmVjYXVzZSBpdCBpbnZvbHZlcyBuZWdhdGl2ZSB2YWx1ZXMgaW4gdGhlIG91dHB1dCBkb21haW4uIA0KDQpUaGUgc2Vuc2l0aXZpdHkgaW5kaWNlcyBhcmUgdGhlbiBjb21wYXJlZDoNCmBgYHtyfQ0KZ3JpZC5hcnJhbmdlKHBsb3QoaW5kMSkgKyBsYWJzKHRpdGxlID0gIkdTQSBPcmlnaW5hbCBTb2JvbCcgRyIpICsgdGhlbWUobGVnZW5kLnBvc2l0aW9uID0gIm5vbmUiKSwNCiAgICAgICAgICAgICBwbG90KGluZCkgKyBsYWJzKHRpdGxlID0gIkdTQSBUcmlnZ2VyZWQgU29ib2wnIEciKSArIHRoZW1lKGxlZ2VuZC5wb3NpdGlvbiA9ICJub25lIiksDQogICAgICAgICAgICAgbnJvdyA9IDEpDQogICAgICAgICAgICAgDQpgYGANCiMgRXhhbXBsZSAyOiBVc2Ugb2YgdHJpZ2dlcnMgd2l0aCBhIHNpbXBsZSBtb2RpZmllZCBTb2JvbCcgRyBGdW5jdGlvbg0KDQokJCBZID0gXHByb2Rfe2kgPSAxfV5rIFxmcmFje3w0WF9pIC0gMnwgKyAxLjEgXGNkb3QgYV9pfXsxICsgYV9pfSBcXCBrID0gOCBcXCBYX2kgXHNpbSBVWzAsIDFdIFxcIGEgPSAoMCwgMSwgNC41LCA5LCA5OSwgOTksIDk5LCA5OSkgJCQNCg0KQW5vdGhlciBleGFtcGxlIGlzIHNob3duLiBUaGUgdHJpZ2dlciBpcyBub3cgdXNlZCB0byBzZWUgaG93IHRoZSBvdXRwdXQgaXMgYWZmZWN0ZWQgYnkgdGhlIGNob2ljZSBvZiB0aGUgbW9kZWwuIFRoZSB0cmlnZ2VyIGlzIGRlZmluZWQgYXMgYmVmb3JlLCB3aXRoIGEgYmluYXJ5IGNob2ljZSBiZXR3ZWVuIHRoZSB0d28gbW9kZWxzLg0KDQpEZWZpbmUgdGhlIHBhcmFtZXRlcnMgb2YgaW50ZXJlc3QgZm9yIG91ciBzZW5zaXRpdml0eSBhbmFseXNpczoNCmBgYHtyfQ0KYV92ZWN0b3IgPC0gYygwLCAxLCA0LjUsIDksIDk5LCA5OSwgOTksIDk5KQ0KDQpOIDwtIDJeMTE7ICMgTnVtYmVyIG9mIHNhbXBsZXMNCmsgPC0gbGVuZ3RoKGFfdmVjdG9yKSAjbnVtYmVyIG9mIHBhcmFtZXRlcnMNCnBhcmFtcyA8LSBjKHBhc3RlKCJ4IiwgMTprLCBzZXAgPSAiIiksICJ0cmlnZ2VyIikgIyBQYXJhbWV0ZXJzIG5hbWVzLCB3aXRoIHRoZSB0cmlnZ2VyDQoNCmZpcnN0IDwtICJzYWx0ZWxsaSINCnRvdGFsIDwtICJqYW5zZW4iDQojIFNwZWNpZnkgdGhlIHR5cGUgb2Ygc2Vuc2l0aXZpdHkgaW5kaWNlcyBmb3IgdGhlIGZ1bmN0aW9uICJzb2JvbF9pbmRpY2VzIi4NCiMgInNhbHRlbGxpIiBmb3IgZmlyc3Qtb3JkZXIgZWZmZWN0cyBhbmQgImphbnNlbiIgZm9yIHRvdGFsLW9yZGVyIGVmZmVjdHMgYXJlIHRoZSBkZWZhdWx0IGNob2ljZXMgZm9yIHRoZSBzZW5zb2JvbCBmdW5jdGlvbi4NCg0KDQpSPC0xMF4zICMgTnVtYmVyIG9mIHJlcGxpY2F0aW9ucyBib290c3RyYXANCmBgYA0KDQpEZWZpbmUgdGhlIGZ1bmN0aW9uczoNCmBgYHtyfQ0Kc29ib2xfRnVuXzAgPC0gZnVuY3Rpb24oWCwgdmVjdG9yKSB7DQogICMgT3JpZ2luYWwgU29ib2wnIEcgRnVuY3Rpb24NCiAgeSA8LSAxDQogIA0KICBmb3IgKGogaW4gMTpsZW5ndGgodmVjdG9yKSkgew0KICAgIHkgPC0geSAqIChhYnMoNCAqIFhbLCBqXSAtIDIpICsgdmVjdG9yW2pdKS8oMSArIHZlY3RvcltqXSkNCiAgfQ0KICByZXR1cm4oeSkNCn0NCg0Kc29ib2xfRnVuXzEgPC0gZnVuY3Rpb24oWCwgdmVjdG9yKSB7DQogICMgU29ib2wnIEcgRnVuY3Rpb24gd2l0aCBhIHRoZSBhZGRlZCBjb2VmZmkNCiAgeSA8LSAxDQogIA0KICBmb3IgKGogaW4gMTpsZW5ndGgodmVjdG9yKSkgew0KICAgIHkgPC0geSAqIChhYnMoNCAqIFhbLCBqXSAtIDIpICsgdmVjdG9yW2pdKS8oMSArIDEuMSAqIHZlY3RvcltqXSkNCiAgfQ0KICByZXR1cm4oeSkNCn0NCmBgYA0KDQotICoqMCoqOiBPcmlnaW5hbCBTb2JvbCcgRyBGdW5jdGlvbg0KLSAqKjEqKjogU29ib2wnIEcgRnVuY3Rpb24gd2l0aCBtb2RpZmljYXRpb24NCg0KYGBge3J9DQpydW5fbW9kZWwgPC0gZnVuY3Rpb24oWCkgew0KICB0cmlnZ2VyIDwtIFhbInRyaWdnZXIiXQ0KICBYX2lucHV0IDwtIFhbIW5hbWVzKFgpICVpbiUgInRyaWdnZXIiXSAgIyBTZWxlY3QgYWxsIGNvbHVtbnMgZXhjZXB0ICJ0cmlnZ2VyIg0KICANCiAgaWYgKHRyaWdnZXIgPT0gMCkgew0KICAgIHJldHVybihzb2JvbF9GdW5fMChtYXRyaXgoWF9pbnB1dCwgbnJvdz0xKSwgYV92ZWN0b3IpKQ0KICB9IGVsc2Ugew0KICAgIHJldHVybihzb2JvbF9GdW5fMShtYXRyaXgoWF9pbnB1dCwgbnJvdz0xKSwgYV92ZWN0b3IpKQ0KICB9DQp9DQpgYGANCg0KRGVmaW5lIHRoZSBkZXNpZ24gbWF0cml4IGFuZCBjb21wdXRlIHRoZSByZXN1bHRzOg0KYGBge3J9DQptYXQgPC0gZGF0YS50YWJsZShzb2JvbF9tYXRyaWNlcyhwYXJhbXMgPSBwYXJhbXMsIE4gPSBOLCB0eXBlID0gIlIiKSkNCg0KIyBUcmFuc2Zvcm0gdGhlIHRyaWdnZXIgdmFyaWFibGUgdG8gYmluYXJ5DQptYXRbLCB0cmlnZ2VyIDo9IGlmZWxzZSh0cmlnZ2VyID4gMC41LCAxLCAwKV0NCg0KIyBDb21wdXRlIG1vZGVsIG91dHB1dHMNCnkgPC0gYXBwbHkobWF0LCAxLCBydW5fbW9kZWwpDQpgYGANCg0KDQpgYGB7cn0NCmdncGxvdChkYXRhLmZyYW1lKHkpLCBhZXMoeCA9IHkpKSArDQogICAgICAgZ2VvbV9oaXN0b2dyYW0oYmlucyA9IDMwLCBmaWxsID0gInN0ZWVsYmx1ZSIsIGNvbG9yID0gImJsYWNrIiwgYWxwaGEgPSAwLjcpICsNCiAgICAgICB0aGVtZV9taW5pbWFsKCkgKyBsYWJzKHRpdGxlID0gIlVBIHdpdGggVHJpZ2dlciIsIHkgPSAiIiwgeCA9ICJPdXRwdXRzIikgKyANCiAgICAgICB0aGVtZShwbG90LnRpdGxlID0gZWxlbWVudF90ZXh0KGhqdXN0ID0gMC41LCBzaXplID0gMTYsIGZhY2UgPSAiYm9sZCIpLA0KICAgICAgICAgICAgICAgYXhpcy50aXRsZSA9IGVsZW1lbnRfdGV4dChzaXplID0gMTIpLA0KICAgICAgICAgICAgICAgYXhpcy50ZXh0ID0gZWxlbWVudF90ZXh0KHNpemUgPSAxMCkpDQpgYGANCg0KVGhlIHNlbnNpdGl2aXR5IGluZGljZXMgYXJlIGNvbXB1dGVkIGFuZCB0aGVuIHBsb3R0ZWQ6DQpgYGB7cn0NCiMgQ29tcHV0ZSBzZW5zaXRpdml0eSBpbmRpY2VzDQppbmQgPC0gc2Vuc29ib2w6OnNvYm9sX2luZGljZXMoWSA9IHksIE4gPSBOLCBwYXJhbXMgPSBwYXJhbXMsIGZpcnN0ID0gZmlyc3QsIHRvdGFsID0gdG90YWwsIGJvb3QgPSBUUlVFLCBSID0gUikNCmBgYA0KDQpgYGB7cn0NCnBsb3QoaW5kKSArIGxhYnModGl0bGUgPSAiU29ib2wnIEcgRnVuY3Rpb24gdW5kZXIgVHJpZ2dlcnMiKSArIHRoZW1lKGxlZ2VuZC5wb3NpdGlvbiA9ICJyaWdodCIpDQpgYGANCk5vdyB0aGUgdHJpZ2dlciBpcyBsZXNzIGltcG9ydGFudCBpbiBkZWZpbmluZyB0aGUgb3V0cHV0Lg0KDQojIEV4YW1wbGUgMzogVXNlIG9mIHRyaWdnZXJzIHRvIGNvbXBhcmUgU29ib2wnIEcgYW5kIFNvYm9sJyBHKi1mdW5jdGlvbnMNCg0KQW4gZXh0ZW5zaW9uIG9mIHRoZSBTb2JvbCBHIGZ1bmN0aW9uIGlzIHVzZWQgaW4gdGFuZGVtIHdpdGggdGhlIG9yaWdpbmFsIG9uZS4gVGhpcyBleHRlbnNpb24gcGVybWl0cyB0byBhdm9pZCB0aGUgUVVBU0ktUkFORE9NIFBST0JMRU0gd2hlbiBjb21wdXRpbmcgdGhlIGZpcnN0IG9ic2VydmF0aW9uLiBJdCBpcyBkZWZpbmVkIGFzIGZvbGxvd3M6DQoNCiQkIEdeKihYXzEsIFxsZG90cywgWF9rLCBhXzEsIFxsZG90cywgYV9rLCBcZGVsdGFfMSwgXGxkb3RzLCBcZGVsdGFfaywgXGFscGhhXzEsIFxsZG90cywgXGFscGhhX2spID0gXHByb2Rfe2k9MX1eayBnX2leKiwgJCQNCg0KJCRnX2leKiA9IFxmcmFjeygxICsgXGFscGhhX2kpIFxjZG90IFxsZWZ0fDIoWF9pICsgXGRlbHRhX2kgLSBJW1hfaSArIFxkZWx0YV9pXSkgLSAxXHJpZ2h0fF57XGFscGhhX2l9ICsgYV9pfXsxICsgYV9pfSQkDQokWF9pJCBhcmUgYXNzdW1lZCB0byBiZSAkVSBcc2ltIFswLDFdJCwgJGFfaSBcaW4gXG1hdGhjYWx7Un1eKyBcc3BhY2UgXGZvcmFsbCBpID0gMSwgXGRvdHMsIGskLiANCg0KVGhlIGFkZGl0aW9uYWwgcGFyYW1ldGVycyBhcmUgdGhlICpzaGlmdCogJFxkZWx0YV9pIFxpbiBbMCwxXSQgYW5kIHRoZSAqY3VydmF0dXJlKiAkXGFscGhhX2kgXGluIFxtYXRoY2Fse1J9XiskLiANCldoZW4gJFxkZWx0YV9pID0gMCQgYW5kICRcYWxwaGFfaSA9IDEkLCB0aGUgZnVuY3Rpb24gaXMgZXF1aXZhbGVudCB0byB0aGUgb3JpZ2luYWwgU29ib2wnIEcgZnVuY3Rpb24uDQoNClRoZSBtZWFuIGlzIGRlZmluZWQgYXM6DQokRShHXiooWF9pLCBhX2ksIFxhbHBoYV9pKSkgPSAxJCBiZWNhdXNlIGVhY2ggJFhfaSQgaGFzIG1lYW4gZXF1YWwgdG8gMS4NCg0KVGhlIHZhcmlhbmNlIGlzIGRlZmluZWQgYXM6DQokVihHXiooWF9pLCBhX2ksIFxhbHBoYV9pKSkgPSBcZnJhY3tcYWxwaGFfaV4yfXsoMSsyXGFscGhhX2kpKDErYV9pKV4yfSQNCg0KVGhlIGNvZGluZyBwcm9jZWVkcyBhcyBiZWZvcmUuDQoNCkVuc3VyZSByZXByb2R1Y2liaWxpdHkgYnkgc2V0dGluZyBhIHNlZWQ6DQpgYGB7cn0NCnNldC5zZWVkKDEwMCkNCmBgYA0KDQpEZWZpbmUgdGhlIGNvbW1vbiBwYXJhbWV0ZXJzIG9mIGludGVyZXN0IG9mIGJvdGggZnVuY3Rpb25zIGZvciBvdXIgc2Vuc2l0aXZpdHkgYW5hbHlzaXM6DQpgYGB7cn0NCk4gPC0gMl4xMTsgIyBOdW1iZXIgb2Ygc2FtcGxlcw0KDQpmaXJzdCA8LSAic2FsdGVsbGkiDQp0b3RhbCA8LSAiamFuc2VuIiAjIFNwZWNpZnkgdGhlIHR5cGUgb2Ygc2Vuc2l0aXZpdHkgaW5kaWNlcyBmb3IgdGhlIGZ1bmN0aW9uICJzb2JvbF9pbmRpY2VzIi4NCg0KUjwtMTBeMyAjIE51bWJlciBvZiByZXBsaWNhdGlvbnMgYm9vdHN0cmFwDQoNCmFfdmVjdG9yIDwtIGMoMCwgMSwgNC41LCA5LCA5OSwgOTksIDk5LCA5OSkNCmsgPC0gbGVuZ3RoKGFfdmVjdG9yKSAjIE51bWJlciBvZiBwYXJhbWV0ZXJzDQpwYXJhbXMgPC0gYyhwYXN0ZSgieCIsIDE6aywgc2VwID0gIiIpLCAidHJpZ2dlciIpICMgUGFyYW1ldGVycyBuYW1lcywgd2l0aCB0aGUgdHJpZ2dlcg0KYGBgDQoNCkFnYWluLCB0aGUgJGFfaSQgdmFsdWVzIGFyZSBhcmJpdHJhcnk7IHRoZSBoaWdoZXIgdGhleSBhcmUsIHRoZSBsZXNzIHNlbnNpYmxlIHRoZSBvdXRwdXQgaXMgdG8gdGhlIHNwZWNpZmljIGlucHV0Lg0KDQpEZWZpbmUgdGhlIHNwZWNpZmljIHBhcmFtZXRlcnMgb2YgdGhlIFNvYm9sJyBHKiBGdW5jdGlvbi4gVGhlc2UgY291bGQgYmUgc2FtcGxlZCBhcyB3ZWxsLCBidXQgZm9yIG5vdyB3ZSBjaG9vc2UgYXJiaXRyYXJ5IHZhbHVlczoNCmBgYHtyfQ0KZGVsdGEgPC0gcnVuaWYoMSwgMCwgMSkgIyBTaGlmdA0KYWxwaGEgPC0gMC43ICMgQ3VydmF0dXJlDQpgYGANCg0KTm93IGRlZmluZSB0aGUgU29ib2wnIEcgYW5kIHRoZSBTb2JvbCcgRyogZnVuY3Rpb25zOg0KYGBge3J9DQpzb2JvbF9GdW5fMCA8LSBmdW5jdGlvbihYLCBhX3ZlY3Rvcikgew0KICAjIE1vZGVsL2Z1bmN0aW9uIHdpdGggYWJzb2x1dGUgdmFsdWVzDQogIHkgPC0gMQ0KICANCiAgZm9yIChqIGluIDE6bGVuZ3RoKGFfdmVjdG9yKSkgew0KICAgIHkgPC0geSAqIChhYnMoNCAqIFhbLCBqXSAtIDIpICsgYV92ZWN0b3Jbal0pLygxICsgYV92ZWN0b3Jbal0pDQogIH0NCiAgcmV0dXJuKHkpDQp9DQoNCnNvYm9sX0Z1bl9TdGFyIDwtIGZ1bmN0aW9uKFgsIGFfdmVjdG9yLCBkZWx0YSwgYWxwaGEpIHsNCiAgeSA8LSAxDQogICMgRW5zdXJlIGNvbnN0cmFpbnRzIGFyZSBtZXQNCiAgaWYgKGFscGhhIDw9IDApIHN0b3AoImFscGhhX2kgbXVzdCBiZSBncmVhdGVyIHRoYW4gMCIpDQogIGlmIChkZWx0YSA8IDAgfHwgZGVsdGEgPiAxKSBzdG9wKCJkZWx0YV9pIG11c3QgYmUgYmV0d2VlbiAwIGFuZCAxIikNCiAgDQogIGZvciAoaiBpbiAxOmxlbmd0aChhX3ZlY3RvcikpIHsNCiAgICAjIEluZGljYXRvciBmdW5jdGlvbiBpcyB0aGUgaW50ZWdlciBwYXJ0IG9mIGl0cyBpbm5lciB2YWx1ZQ0KICAgIEkgPC0gZmxvb3IoWFssIGpdICsgZGVsdGEpDQogICAgDQogICAgIyBDYWxjdWxhdGUgZ19pKg0KICAgIG51bWVyYXRvciA8LSAoMSArIGFscGhhKSAqIGFicygyICogKFhbLCBqXSArIGRlbHRhIC0gSSkgLSAxKV5hbHBoYSArIGFfdmVjdG9yW2pdDQogICAgZ19zdGFyIDwtIG51bWVyYXRvciAvICgxICsgYV92ZWN0b3Jbal0pDQogICAgDQogICAgeSA8LSB5ICogZ19zdGFyDQogIH0NCiAgcmV0dXJuKHkpDQp9DQpgYGANCg0KQSBzcGVjaWZpYyBmdW5jdGlvbiBpcyBjcmVhdGVkIGluIG9yZGVyIHRvIGJlIGFwcGxpZWQgb24gZWFjaCByb3cgb2YgdGhlIGRlc2lnbiBtYXRyaXguIFRoZSB0d28gZGlmZmVyZW50IFNvYm9sJyBHIEZ1bmN0aW9ucyBhcmUgdGhlbiBydW4gYWNjb3JkaW5nIHRvIHRoZSByb3ctc3BlY2lmaWMgdHJpZ2dlciB2YWx1ZToNCmBgYHtyfQ0KcnVuX21vZGVsIDwtIGZ1bmN0aW9uKFgpIHsNCiAgdHJpZ2dlciA8LSBYWyJ0cmlnZ2VyIl0NCiAgWF9pbnB1dCA8LSBYWyFuYW1lcyhYKSAlaW4lICJ0cmlnZ2VyIl0gICMgU2VsZWN0IGFsbCBjb2x1bW5zIGV4Y2VwdCAidHJpZ2dlciINCiAgDQogIGlmICh0cmlnZ2VyID09IDApIHsNCiAgICByZXR1cm4oc29ib2xfRnVuXzAobWF0cml4KFhfaW5wdXQsIG5yb3c9MSksIGFfdmVjdG9yKSkNCiAgfSBlbHNlIHsNCiAgICByZXR1cm4oc29ib2xfRnVuX1N0YXIobWF0cml4KFhfaW5wdXQsIG5yb3c9MSksIGFfdmVjdG9yLCBkZWx0YSwgYWxwaGEpKQ0KICB9DQp9DQpgYGANCg0KVGhlIHNhbXBsZSBtYXRyaXggaXMgZGVmaW5lZCBhbmQgdGhlIGNvbHVtbnMgYXJlIGFwcHJvcHJpYXRlbHkgdHJhbnNmb3JtZWQuIEluIG91ciBjYXNlLCB3ZSBqdXN0IG5lZWQgdG8gZGlzY3JldGl6ZSB0aGUgInRyaWdnZXIiIHZhcmlhYmxlLg0KDQotICoqIDA6IFNvYm9sJyBHIEZ1bmN0aW9uICoqDQotICoqIDE6IFNvYm9sJyBHKiBGdW5jdGlvbiAqKg0KDQpgYGB7cn0NCm1hdCA8LSBkYXRhLnRhYmxlKHNvYm9sX21hdHJpY2VzKHBhcmFtcyA9IHBhcmFtcywgTiA9IE4sIHR5cGUgPSAiUiIpKQ0KDQojIFRyYW5zZm9ybSB0aGUgdHJpZ2dlciB2YXJpYWJsZSB0byBiaW5hcnkNCm1hdCA8LSAobWF0WywgdHJpZ2dlciA6PSBpZmVsc2UodHJpZ2dlciA+IDAuNSwgMSwgMCldKQ0KDQojIENvbXB1dGUgbW9kZWwgb3V0cHV0cw0KeSA8LSBhcHBseShtYXQsIDEsIHJ1bl9tb2RlbCkNCmBgYA0KDQpUaGUgb3V0cHV0IGRpc3RyaWJ1dGlvbiBpcyBwbG90dGVkOg0KYGBge3J9DQpnZ3Bsb3QoZGF0YS5mcmFtZSh5KSwgYWVzKHggPSB5KSkgKw0KICAgICAgICAgICAgICAgICAgZ2VvbV9oaXN0b2dyYW0oYmlucyA9IDMwLCBmaWxsID0gInN0ZWVsYmx1ZSIsIGNvbG9yID0gImJsYWNrIiwgYWxwaGEgPSAwLjcpICsNCiAgICAgICAgICAgICAgICAgIHRoZW1lX21pbmltYWwoKSArIGxhYnMoeSA9ICIiLCB0aXRsZSA9ICJPdXRwdXQgRGlzdHJpYnV0aW9uIG9mIFNvYm9sJyBHKiBGdW5jdGlvbiB1bmRlciBUcmlnZ2VycyIpICsNCiAgICAgICAgICAgICAgICAgIHRoZW1lKHBsb3QudGl0bGUgPSBlbGVtZW50X3RleHQoaGp1c3QgPSAwLjUsIHNpemUgPSAxNiwgZmFjZSA9ICJib2xkIikpDQpgYGANCg0KVGhlIHNlbnNpdGl2aXR5IGluZGljZXMgYXJlIGNvbXB1dGVkIGFuZCB0aGVuIHBsb3R0ZWQ6DQpgYGB7cn0NCiMgQ29tcHV0ZSBzZW5zaXRpdml0eSBpbmRpY2VzDQppbmQgPC0gc2Vuc29ib2w6OnNvYm9sX2luZGljZXMoWSA9IHksIE4gPSBOLCBwYXJhbXMgPSBwYXJhbXMsIGZpcnN0ID0gZmlyc3QsIHRvdGFsID0gdG90YWwsIGJvb3QgPSBUUlVFLCBSID0gUikNCmBgYA0KDQpgYGB7cn0NCnBsb3QoaW5kKSArIGxhYnModGl0bGUgPSAiU29ib2wnIEcgRnVuY3Rpb24gdW5kZXIgdHJpZ2dlciIpICsgdGhlbWUobGVnZW5kLnBvc2l0aW9uID0gInJpZ2h0IikNCmBgYA0KDQojIEV4YW1wbGUgNDogVXNlIG9mIHRyaWdnZXJzIGluIEdBUkNIIG1vZGVsbGluZw0KDQpHQVJDSCAoR2VuZXJhbGl6ZWQgQXV0b1JlZ3Jlc3NpdmUgQ29uZGl0aW9uYWwgSGV0ZXJvc2tlZGFzdGljaXR5KSBtb2RlbGxpbmcgaXMgYSBzdGF0aXN0aWNhbCBhcHByb2FjaCB1c2VkIHRvIGFuYWx5emUgYW5kIGZvcmVjYXN0IHZvbGF0aWxpdHkgaW4gdGltZSBzZXJpZXMgZGF0YS4NCg0KQSBnZW5lcmljIEdBUkNIKG0sIHMpIG1vZGVsIGlzIGRlZmluZWQgYXM6IA0KDQokJCBcc2lnbWFfdF4yID0gXGFscGhhXzAgKyBcc3VtX3tpPTF9XnttfSBcYWxwaGFfaSBhX3t0LWl9XjIgKyBcc3VtX3tqPTF9XntzfSBcYmV0YV9qIFxzaWdtYV97dC1qfV4yICQkDQoNCndoZXJlOg0KDQotICRhX3QgPSBcc2lnbWFfdCBcZXBzaWxvbl90JDsNCg0KLSAkXGFscGhhXzAgPiAwLCBcYWxwaGFfaSBcZ2VxIDAsIFxiZXRhX2ogXGdlcSAwJDsNCg0KLSAkXHN1bV97aT0xfV57bWF4KG0sIHMpfSAoXGFscGhhX2kgKyBcYmV0YV9pKSA8IDEkDQoNClRoZXNlIGFyZSB0aGUgX3N0YWJpbGl0eSBjb25kaXRpb25zXy4NCg0KVGhlc2UgbW9kZWwgY2FuIGJlIGV4dGVuZGVkIHRvIHRha2UgaW50byBhY2NvdW50IHZvbGF0aWxpdHkgYXN5bW1ldHJpZXMsIGVzcGVjaWFsbHkgbGV2ZXJhZ2UgZWZmZWN0cywgd2hlcmUgbmVnYXRpdmUgc2hvY2tzIGhhdmUgYSBkaWZmZXJlbnQgaW1wYWN0IG9uIHZvbGF0aWxpdHkgdGhhbiBwb3NpdGl2ZSBzaG9ja3Mgb2YgdGhlIHNhbWUgbWFnbml0dWRlLg0KDQpUaGUgZXh0ZW5zaW9ucyBhcmUgdGhlICoqR0pSLUdBUkNIKiogYW5kICoqVC1HQVJDSCoqIG1vZGVscy4NCg0KVGhlIEdKUi1HQVJDSCBtb2RlbCBpcyBkZWZpbmVkIGFzOg0KDQokJCBcc2lnbWFfdF4yID0gXGFscGhhXzAgKyBcc3VtX3tpPTF9XnttfSBcYWxwaGFfaSBhX3t0LWl9XjIgKyBcc3VtX3tqPTF9XntzfSBcYmV0YV9qIFxzaWdtYV97dC1qfV4yICsgXHN1bV97az0xfV57c30gXGdhbW1hX2sgYV97dC1rfV4yIElfe3Qta30gJCQNCmFuZCB0aGUgVC1HQVJDSCBtb2RlbCBpcyBkZWZpbmVkIGFzOg0KDQokJCBcc2lnbWFfdF4yID0gXGFscGhhXzAgKyBcc3VtX3tpPTF9XnttfSBcYWxwaGFfaSB8YV97dC1pfXwgKyBcc3VtX3tqPTF9XntzfSBcYmV0YV9qIHxcc2lnbWFfe3Qtan18ICsgXHN1bV97az0xfV57c30gXGdhbW1hX2sgfGFfe3Qta318IElfe3Qta30gJCQNCg0KJElfe3Qta30kIGlzIGFuIGluZGljYXRvciBmdW5jdGlvbiBmdW5jdGlvbiB0aGF0IHRha2VzIHZhbHVlcyAxIGlmIHRoZSBwYXN0IHJlc2lkdWFscyBuZWdhdGl2ZSBhbmQgZXF1YWwgdG8gMCBpZiB0aGUgcGFzdCByZXNpZHVhbCBpcyBub24tbmVnYXRpdmUuDQoNClRoZXNlIG1vZGVscyBjYW4gYmUgZWZmaWNpZW50bHkgcmVwcmVzZW50ZWQgYXM6DQoNCiQkXHNpZ21hX3ReMiA9IFxhbHBoYV8wICsgXHN1bV97aT0xfV57bX0gXGFscGhhX2kgfGFfe3QtaX18XmMgKyBcc3VtX3tqPTF9XntzfSBcYmV0YV9qIHxcc2lnbWFfe3Qtan18XmMgKyBcc3VtX3trPTF9XntzfSBcZ2FtbWFfayB8YV97dC1rfXxeYyBJX3t0LWt9JCQNCmMgY2FuIHRha2UgdmFsdWUgMSBvciAyLCBkZXBlbmRpbmcgb24gdGhlIG1vZGVsOg0KDQotIHdoZW4gYyA9IDIsIHRoZSBtb2RlbCByZXByZXNlbnRzIHRoZSBHSlItR0FSQ0ggbW9kZWwsDQotIHdoZW4gYyA9IDEsIHRoZSBtb2RlbCByZXByZXNlbnRzIHRoZSBULUdBUkNIIG1vZGVsLg0KDQpIZW5jZSwgYyBjYW4gYmUgY29uc2lkZXJlZCBhcyBhIGdsb2JhbCBzZW5zaXRpdml0eSBhbmFseXNpcyB0cmlnZ2VyIHRoYXQgY291bGQgaGVscCB1cyBpbiAuLi4NCg0KVG8gbWFrZSB0aGUgZXhhbXBsZSBzaW1wbGUsIHdlIHN0YXJ0IGJ5IGZvcmVjYXN0aW5nIGEgc2luZ2xlIHZhbHVlIGluIHRoZSBmdXR1cmUgKHRoZSBzby1jYWxsZWQgIm9uZS1zdGVwIGFoZWFkIGZvcmVjYXN0IikgZm9yIHRoZSBjb25kaXRpb25hbCB2YXJpYW5jZSBvZiB0aGUgc3RvY2sgcmV0dXJucywgb25lIGZvciBlYWNoIGRpc3RyaWJ1dGlvbi4NCg0KDQoNCiMjIEdKUi1HQVJDSCBhbmQgVC1HQVJDSCB2b2xhdGlsaXR5IG1vZGVsbGluZzogY29kaW5nDQoNClRoZSBmZWFzaWJsZSBpbnB1dCBzcGFjZSBpbnZvbHZlcyA3IHBhcmFtZXRlcnM6DQoNCi0gQVJDSCBvcmRlciAocSk6IHVzdWFsbHkgMCwgMSBvciAyICh0d28gYmluYXJ5IHZhcmlhYmxlcyk7DQotIEdBUkNIIG9yZGVyIChwKTogdXN1YWxseSAwLCAxIG9yIDIgKHR3byBiaW5hcnkgdmFyaWFibGVzKTsNCg0KLSBjb25zdGFudCB0ZXJtICRcYWxwaGFfMCQsIHVzdWFsbHkgYmV0d2VlbiAwIGFuZCAwLjEgKGNvbnRpbnVvdXMpOw0KLSAkXGFscGhhX2kkIGNvZWZmaWNpZW50cywgYmV0d2VlbiAwIGFuZCAwLjI0OTk5LCB0byByZXNwZWN0IHN0YWJpbGl0eSBjb25zdHJhaW50cyAoY29udGludW91cyk7DQotICRcYmV0YV9qJCBjb2VmZmljaWVudHMsICBiZXR3ZWVuIDAgYW5kIDAuMjQ5OTksIHRvIHJlc3BlY3Qgc3RhYmlsaXR5IGNvbnN0cmFpbnRzIChjb250aW51b3VzKTsNCi0gdGhlIGlubm92YXRpb24gdGVybSwgJFxlcHNpbG9uX3QkLCBjYW4gYmUgZGVmaW5lZCBhcyBkaWZmZXJlbnQgc2tld2VkIGFuZCBwbGF0eWt1cnRpYyBkaXN0cmlidXRpb25zLCB0aGUgU3R1ZGVudCdzIHQtZGlzdHJpYnV0aW9uIGlzIGNob3NlbiB0byBjYXB0dXJlICJmYXQtdGFpbGVkbmVzcyIsIHdpdGggYSByYW5nZSBmcm9tIDEgdG8gMzAgZGVncmVlcyBvZiBmcmVlZG9tLiBSZWNhbGwgdGhhdCAkXHRleHR7ZG9mfSBccmlnaHRhcnJvdyBcaW5mdHkkIGNvbnZlcmdlcyB0byBhIG5vcm1hbCBkaXN0cmlidXRpb24uDQoNCnRoZSBBUi1NQSBvcmRlcnMsIHRoYXQgZ292ZXJuIHRoZSBtZWFuIGVxdWF0aW9uLCBmaXhlZCB0byBhcmUgKDAsMCkuDQoNClRvIGF2b2lkIG92ZXItY29tcGxpY2F0aW5nIHRoZSBjb2RlLCB3ZSBzaG9ydGVuIHRoZSBjb2VmZmljaWVudCBwYXJhbWV0ZXIgc3BhY2UgdG8gMC4yNDk5OSwgc28gaW4gdGhlICJ3b3JzdC1jYXNlIiBzY2VuYXJpbyB0aGUgc3VtIG9mIHRoZSBjb2VmZmljaWVudHMgaW4gR0FSQ0goMiwyKSBpcyBsZXNzIHRoYW4gMSwgdGh1cyByZXNwZWN0aW5nIHRoZSBzdGFiaWxpdHkgY29uZGl0aW9ucy4NCg0KV2UgdXNlIHRoZSBNaWNyb3NvZnQgc3RvY2sgZGF0YSBmcm9tIDIwMTAgdG8gQXVndXN0IDIwMjQuDQpgYGB7ciB3YXJuaW5nPUZBTFNFLCBpbmNsdWRlPUZBTFNFLCBwYWdlZC5wcmludD1UUlVFfQ0KIyBEb3dubG9hZCBNaWNyb3NvZnQgc3RvY2sgZGF0YQ0KZ2V0U3ltYm9scygiTVNGVCIsIGZyb20gPSAiMjAxMC0wMS0wMSIsIHRvID0gIjIwMjQtMDgtMzEiKQ0KDQojIENhbGN1bGF0ZSByZXR1cm5zDQpyZXR1cm5zIDwtIGRpZmYobG9nKE1TRlQkTVNGVC5DbG9zZSkpDQpyZXR1cm5zIDwtIHJldHVybnNbLTFdICAjIFJlbW92ZSB0aGUgZmlyc3QgTkEgdmFsdWUNCmBgYA0KDQpUaGUgbW9kZWwgaXMgc3BlY2lmaWVkLi4uDQpgYGB7cn0NCm0gPC0gMQ0KcyA8LTENCg0Kc3BlYyA8LSB1Z2FyY2hzcGVjKA0KICB2YXJpYW5jZS5tb2RlbCA9IGxpc3QobW9kZWwgPSAidEdBUkNIIiwgZ2FyY2hPcmRlciA9IGMoMSwgMSkpLA0KICBtZWFuLm1vZGVsID0gbGlzdChhcm1hT3JkZXIgPSBjKDEsIDEpLCBpbmNsdWRlLm1lYW4gPSBUUlVFKSwNCiAgZGlzdHJpYnV0aW9uLm1vZGVsPSJzdGQiLCBmaXhlZC5wYXJzPWxpc3Qoc2hhcGU9MykgICMgU3R1ZGVudCdzIHQgZGlzdHJpYnV0aW9uIGZvciBiZXR0ZXIgZml0DQopDQpgYGANCg0KLi4uYW5kIHRoZW4gZml0dGVkOg0KYGBge3J9DQpmaXQgPC0gdWdhcmNoZml0KHNwZWMsIHJldHVybnMpDQpgYGANCg0KYGBge3J9DQpzaG93KGZpdCkNCmBgYA0KDQoNCiQkXHtcZXBzaWxvbl90XH0gXHNpbSBpaWQoMCwxKSQkDQpvcg0KDQokJFx7XGVwc2lsb25fdFx9IFxzaW0gdCg1KSQkDQojIyBTZW5zaXRpdml0eSBBbmFseXNpcw0KDQpUaGUgcGFyYW1ldGVycyBvZiBvdXIgbW9kZWwgdW5kZXIgc2NydXRpbnkgYW5kIHRoZSBTQSAoaHlwZXIpcGFyYW1ldGVycyBhcmUgZGVmaW5lZDoNCmBgYHtyfQ0KIyBEZWZpbmUgdGhlIHBhcmFtZXRlcnMNCnBhcmFtcyA8LSBjKCJBUkNIb3JkZXIiLCAiR0FSQ0hvcmRlciIsICJDb25zdGFudFRlcm0iLCAiQVJDSENvZWZmIiwNCiAgICAgICAgICAgICJHQVJDSENvZWZmIiwgInN0dWRlbnRUX2RvZiIsICJUdnNHSlJHYXJjaFRyaWdnZXIiKQ0KcGFyYW1zIDwtIGMoIkFSQ0hvcmRlciIsICJHQVJDSG9yZGVyIiwgImludGVyY2VwdF90ZXJtIiwgIkFSQ0hDb2VmZiIsDQogICAgICAgICAgICAiR0FSQ0hDb2VmZiIsICJzdHVkZW50VF9kb2YiKQ0KTiA8LSAyXjEzDQpmaXJzdCA8LSAic2FsdGVsbGkiDQp0b3RhbCA8LSAiamFuc2VuIg0KYGBgDQoNClRoZSBkZXNpZ24gbWF0cml4IGlzIGNyZWF0ZWQgd2l0aCB0aGUgYHNlbnNvYm9sYCBwYWNrYWdlIGFuZCB0aGUgcGFyYW1ldGVycyB1bmlmb3JtbHkgZGlzdHJpYnV0ZWQgcmFuZG9tIHNhbXBsZXMgYXJlIG1hcHBlZCB0byB0aGVpciByZXNwZWN0aXZlIGludGVydmFscy4gUmVjYWxsIHRoYXQgc29tZSBpbnRlcnZhbHMgbXVzdCByZXNwZWN0IHRoZSBzdG9jaGFzdGljIHByb2Nlc3NlcyBiZWhpbmQgdGhlIEdBUkNIIG1vZGVsLg0KYGBge3J9DQojIGNyZWF0ZSBhIGRlc2lnbiBtYXRyaXggd2l0aCByYW5kb20gc2FtcGxlDQptYXQgPC0gYXMuZGF0YS5mcmFtZShzb2JvbF9tYXRyaWNlcyhwYXJhbXMgPSBwYXJhbXMsIE4gPSBOLCB0eXBlID0gIlIiKSkNCg0KI05vdyBlYWNoIHZhcmlhYmxlIG11c3QgYmUgdHJhbnNmb3JtZWQgdG8gdGhlIGFwcHJvcHJpYXRlIHR5cGUgYW5kIG1hcHBlZCBpbiB0aGVpciBwcm9wZXIgaW50ZXJ2YWxzLg0KDQojIGNyZWF0ZSBpbnRlcnZhbHMgYW5kIG1hcCBkaXNjcmV0ZSB2YWx1ZXMgb2YgQVJDSCBvcmRlcnMNCm1hdCRBUkNIb3JkZXIgPC0gYXMuZmFjdG9yKGN1dChtYXQkQVJDSG9yZGVyLCBicmVha3MgPSBjKC0xLCAwLjMzMzMzLCAwLjY2NjY2LCAxKSwgbGFiZWxzID0gYygwLCAxLCAyKSwgcmlnaHQgPSBGQUxTRSkpDQoNCiMganVzdCBmb3Igb25jZSwgY2hlY2sgaWYgZWFjaCBvcmRlciBoYXMgdGhlIHNhbWUgZnJlcXVlbmN5DQpmcmVxX3RhYmxlIDwtIHRhYmxlKG1hdCRBUkNIQ29lZmYpDQoNCiMgY3JlYXRlIGludGVydmFscyBhbmQgbWFwIGRpc2NyZXRlIHZhbHVlcyBvZiBHQVJDSCBvcmRlcnMNCm1hdCRHQVJDSG9yZGVyIDwtIGFzLmZhY3RvcihjdXQobWF0JEdBUkNIb3JkZXIsIGJyZWFrcyA9IGMoLTEsIDAuMzMzMzMsIDAuNjY2NjYsIDEpLCBsYWJlbHMgPSBjKDAsIDEsIDIpLCByaWdodCA9IEZBTFNFKSkNCg0KIyBjcmVhdGUgaW50ZXJ2YWxzIGFuZCBtYXAgY29udGludW91cyB2YWx1ZXMgb2YgQVJDSC9HQVJDSCBjb2VmZmljaWVudHMgdGVybXMNCm1hdCRBUkNIQ29lZmYgPC0gbWF0JEFSQ0hDb2VmZiAqIDAuMjQ5OTkNCm1hdCRHQVJDSENvZWZmIDwtIG1hdCRHQVJDSENvZWZmICogMC4yNDk5OQ0KDQojIENyZWF0ZSBpbnRlcnZhbHMNCmludGVydmFscyA8LSBzZXEoMCwgMSwgYnkgPSAxLzMwKQ0KIyBGdW5jdGlvbiB0byBhc3NpZ24gcG9zaXRpb25hbCB2YWx1ZXMNCmFzc2lnbl9wb3NpdGlvbiA8LSBmdW5jdGlvbih4LCBpbnRlcnZhbHMpIHsNCiAgaW50ZXJ2YWxfaW5kZXggPC0gZmluZEludGVydmFsKHgsIGludGVydmFscywgcmlnaHRtb3N0LmNsb3NlZCA9IFRSVUUpDQogIHJldHVybihpbnRlcnZhbF9pbmRleCkNCn0NCg0KbWF0JHN0dWRlbnRUX2RvZiA8LSBhcy5mYWN0b3IoYXNzaWduX3Bvc2l0aW9uKG1hdCRzdHVkZW50VF9kb2YsIGludGVydmFscykpDQoNCiMgbWFwIHRoZSBjb3N0YW50IHRlcm0gaW50ZXJ2YWwNCm1hdCRpbnRlcmNlcHRfdGVybSA8LSBtYXQkaW50ZXJjZXB0X3Rlcm0gKiAwLjENCg0KIyBDcmVhdGUgdGhlIHRyaWdnZXINCiMgbWF0JFR2c0dKUkdhcmNoVHJpZ2dlciA8LSBhcy5mYWN0b3IoY3V0KG1hdCRUdnNHSlJHYXJjaFRyaWdnZXIsIGJyZWFrcyA9IGMoLTEsIDAuNSwgMSksIGxhYmVscyA9IGMoMCwgMSksICMgICAgICAgICAgICAgICAgICAgICAgICAgICAgIHJpZ2h0ID0gRkFMU0UpKQ0KYGBgDQoNCk5vdyB0aGUgZm9yZWNhc3RpbmcgUiBmdW5jdGlvbiBpcyBkZWZpbmVkLiBJdCBpbnZvbHZlcyB0aGUgZXN0aW1hdGlvbiBvZiB0aGUgR0FSQ0ggbW9kZWwgYW5kIHRoZSBvbmUtc3RlcCBhaGVhZCBmb3JlY2FzdCBhdCBlYWNoIG1hdHJpeCByb3cuIA0KDQpgYGB7cn0NCg0KIyBEZWZpbmUgdGhlIGZ1bmN0aW9uDQpjb21wdXRlX2ZvcmVjYXN0IDwtIGZ1bmN0aW9uKG1hdCwgcmV0dXJucywgbnVtX3Jvd3MgPSBucm93KG1hdCkpIHsNCiAgIyBQcmUtYWxsb2NhdGUgYSB2ZWN0b3IgZm9yIGZvcmVjYXN0cw0KICBmb3JlY2FzdF92ZWN0b3IgPC0gbnVtZXJpYyhudW1fcm93cykNCiAgDQogICMgTG9vcCBvdmVyIHRoZSBzcGVjaWZpZWQgbnVtYmVyIG9mIHJvd3MNCiAgZm9yIChyb3cgaW4gMTpudW1fcm93cykgew0KICAgICMgRXh0cmFjdCBwYXJhbWV0ZXJzIGZyb20gdGhlIHJvdw0KICAgIGFyY2hfb3JkZXIgPC0gbWF0W3JvdywgIkFSQ0hvcmRlciJdDQogICAgZ2FyY2hfb3JkZXIgPC0gbWF0W3JvdywgIkdBUkNIb3JkZXIiXQ0KICAgIGludGVyY2VwdF90ZXJtIDwtIG1hdFtyb3csICJpbnRlcmNlcHRfdGVybSJdDQogICAgaW50ZXJjZXB0X3Rlcm0gPC0gMC4wNQ0KICAgIGFyY2hfY29lZmYgPC0gbWF0W3JvdywgIkFSQ0hDb2VmZiJdDQogICAgYXJjaF9jb2VmZiA8LSAxDQogICAgZ2FyY2hfY29lZmYgPC0gbWF0W3JvdywgIkdBUkNIQ29lZmYiXQ0KICAgIGdhcmNoX2NvZWZmIDwtIDENCiAgICBzdHVkZW50X3RfZG9mIDwtIG1hdFtyb3csICJzdHVkZW50VF9kb2YiXQ0KICAgIA0KICAgICMgU3BlY2lmeSB3aGljaCBHQVJDSCB0byB1c2UNCiAgICBzcGVjIDwtIHVnYXJjaHNwZWMoDQogICAgICB2YXJpYW5jZS5tb2RlbCA9IGxpc3QobW9kZWwgPSAiZ2pyR0FSQ0giLA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgIGdhcmNoT3JkZXIgPSBjKGdhcmNoX29yZGVyLCBhcmNoX29yZGVyKSksDQogICAgICBtZWFuLm1vZGVsID0gbGlzdChhcm1hT3JkZXIgPSBjKDAsIDApLCBpbmNsdWRlLm1lYW4gPSBUUlVFKSwNCiAgICAgIGRpc3RyaWJ1dGlvbi5tb2RlbCA9ICJzdGQiLA0KICAgICAgc3RhcnQucGFycyA9IGxpc3QoDQogICAgICAgIG11ID0gbWVhbihyZXR1cm5zKSwNCiAgICAgICAgb21lZ2EgPSBpbnRlcmNlcHRfdGVybSwNCiAgICAgICAgYWxwaGExID0gYXJjaF9jb2VmZiwNCiAgICAgICAgYmV0YTEgPSBnYXJjaF9jb2VmZiwNCiAgICAgICAgZ2FtbWExID0gMCksDQogICAgICBmaXhlZC5wYXJzID0gbGlzdChzaGFwZSA9IHN0dWRlbnRfdF9kb2YpDQogICAgKQ0KICAgIA0KICAgICMgRXN0aW1hdGUgYW5kIGZpdCB0aGUgR0FSQ0ggTW9kZWwgdG8gdGhlIHN0b2NrIHJldHVybnMNCiAgICBmaXQgPC0gdHJ5KHVnYXJjaGZpdChzcGVjLCByZXR1cm5zLCBzb2x2ZXIgPSAiaHlicmlkIiksIHNpbGVudCA9IFRSVUUpDQogICAgDQogICAgIyBPbmUtc3RlcCBBaGVhZCBGb3JlY2FzdA0KICAgIGlmICghaW5oZXJpdHMoZml0LCAidHJ5LWVycm9yIikpIHsNCiAgICAgIGZvcmVjYXN0IDwtIHVnYXJjaGZvcmVjYXN0KGZpdCwgbi5haGVhZCA9IDEpDQogICAgICBmb3JlY2FzdF92ZWN0b3Jbcm93XSA8LSBmb3JlY2FzdEBmb3JlY2FzdCRzaWdtYUZvcg0KICAgIH0gZWxzZSB7DQogICAgICBmb3JlY2FzdF92ZWN0b3Jbcm93XSA8LSBOQQ0KICAgIH0NCiAgfQ0KICANCiAgcmV0dXJuKGZvcmVjYXN0X3ZlY3RvcikNCn0NCmBgYA0KDQpHaXZlbiBmdW5jdGlvbiBjb21wbGV4aXR5LCB3ZSBydW4gaXQgb24gYSBzbWFsbCBzdWJzZXQgKDEwIHJvd3MpIG9mIHRoZSBtYXRyaXggdG8gY2hlY2sgaWYgaXQgd29ya3MgcHJvcGVybHkuDQpgYGB7cn0NCnN0YXJ0ID0gU3lzLnRpbWUoKQ0KY29tcHV0ZV9mb3JlY2FzdChtYXQsIHJldHVybnMsIG51bV9yb3dzID0gMTApDQpjb21wdXRhdGlvbl90aW1lIDwtIFN5cy50aW1lKCkgLSBzdGFydA0KYGBgDQoNCm9uIGEgKHJvdWdoKSBhdmVyYWdlLCB0aGUgZnVuY3Rpb24gdGFrZXMuLi4NCmBgYHtyfQ0KYXMuZG91YmxlKGNvbXB1dGF0aW9uX3RpbWUvMTApDQpgYGANCi4uLnNlY29uZHMgdG8gcnVuLg0KDQpBbiBhdHRlbXB0IHRvIHBhcmFsbGVsaXplIHRoZSBjb21wdXRhdGlvbiBvZiB0aGUgZm9yZWNhc3QgdmVjdG9yIGlzIG1hZGUuIEZvciB0aGlzIHB1cnBvc2UsIHRoZSBwYWNrYWdlcyBgZm9yZWFjaGAsIGBwYXJhbGxlbGAgYW5kIGBkb1BhcmFsbGVsYCBhcmUgdXNlZC4NCmBgYHtyIG1lc3NhZ2U9RkFMU0UsIHdhcm5pbmc9RkFMU0UsIHBhZ2VkLnByaW50PUZBTFNFfQ0KaW5zdGFsbF9pZl9taXNzaW5nKGMoICJmb3JlYWNoIiwgInBhcmFsbGVsIiwgImRvUGFyYWxsZWwiKSkNCg0KbGlicmFyeShmb3JlYWNoKQ0KbGlicmFyeShwYXJhbGxlbCkNCmxpYnJhcnkoZG9QYXJhbGxlbCkNCmBgYA0KDQpCZWZvcmUgZXhlY3V0aW5nIHRoZSBwYXJhbGxlbGl6ZWQgbmVzdGVkIGxvb3AsIHdlIG9yZGVyIHRoZSBjb21wdXRlciB0byB1c2UgNzUlIG9mIHRoZSBjb3JlcyBhdmFpbGFibGUgaW4NCm9yZGVyIHRvIHRha2UgYWR2YW50YWdlIG9mIHBhcmFsbGVsIGNvbXB1dGluZy4NCmBgYHtyfQ0Kbl9jb3JlcyA8LSBtYWtlQ2x1c3Rlcihyb3VuZChkZXRlY3RDb3JlcygpICogMC43NSkpDQpyZWdpc3RlckRvUGFyYWxsZWwobl9jb3JlcykNCmBgYA0KDQoNCmBgYHtyfQ0Kb3V0IDwtIGZvcmVhY2goaSA9IDE6bnJvdyhtYXQpLA0KICAgICAgICAgICAgICAgLnBhY2thZ2VzID0gInJ1Z2FyY2giLA0KICAgICAgICAgICAgICAgLmNvbWJpbmUgPSBjKSAlZG9wYXIlIHsNCiAgICAgICAgICAgICAgICAgY29tcHV0ZV9mb3JlY2FzdChtYXQsIHJldHVybnMsIG51bV9yb3dzID0gMTAwKQ0KICAgICAgICAgICAgICAgfQ0KICAgICAgICAgICAgICAgIA0KYGBgDQoNCg0KYGBge3J9DQojIEZ1bmN0aW9uIHRvIHJ1biBHQVJDSCBtb2RlbCBmb3IgYSBzaW5nbGUgcm93DQpydW5fZ2FyY2hfbW9kZWwgPC0gZnVuY3Rpb24ocm93KSB7DQogICMgRXh0cmFjdCBwYXJhbWV0ZXJzIGZyb20gdGhlIHJvdw0KICBhcmNoX29yZGVyIDwtIGFzLmludGVnZXIocm93WyJBUkNIb3JkZXIiXSkNCiAgZ2FyY2hfb3JkZXIgPC0gYXMuaW50ZWdlcihyb3dbIkdBUkNIb3JkZXIiXSkNCiAgY29uc3RhbnRfdGVybSA8LSByb3dbIkNvbnN0YW50VGVybSJdDQogIGFyY2hfY29lZmYgPC0gcm93WyJBUkNIQ29lZmYiXQ0KICBnYXJjaF9jb2VmZiA8LSByb3dbIkdBUkNIQ29lZmYiXQ0KICBzdHVkZW50X3RfZG9mIDwtIHJvd1sic3R1ZGVudFRfZG9mIl0NCg0KICAjIENyZWF0ZSBHQVJDSCBzcGVjaWZpY2F0aW9uDQogIHNwZWMgPC0gdWdhcmNoc3BlYygNCiAgICB2YXJpYW5jZS5tb2RlbCA9IGxpc3QobW9kZWwgPSBpZmVsc2UoZ2pyX3RyaWdnZXIsICJnanJHQVJDSCIsICJzR0FSQ0giKSwNCiAgICAgICAgICAgICAgICAgICAgICAgICAgZ2FyY2hPcmRlciA9IGMoZ2FyY2hfb3JkZXIsIGFyY2hfb3JkZXIpKSwNCiAgICBtZWFuLm1vZGVsID0gbGlzdChhcm1hT3JkZXIgPSBjKDAsIDApLCBpbmNsdWRlLm1lYW4gPSBUUlVFKSwNCiAgICBkaXN0cmlidXRpb24ubW9kZWwgPSAic3RkIiwNCiAgICBmaXhlZC5wYXJzID0gbGlzdCgNCiAgICAgIG9tZWdhID0gY29uc3RhbnRfdGVybSwNCiAgICAgIGFscGhhMSA9IGFyY2hfY29lZmYsDQogICAgICBiZXRhMSA9IGdhcmNoX2NvZWZmLA0KICAgICAgc2hhcGUgPSBzdHVkZW50X3RfZG9mDQogICAgKQ0KICApDQoNCiAgIyBHZW5lcmF0ZSBzb21lIHJhbmRvbSBkYXRhICh5b3UgbWlnaHQgd2FudCB0byB1c2UgeW91ciBhY3R1YWwgZGF0YSBoZXJlKQ0KICBkYXRhIDwtIHJub3JtKDEwMDApDQoNCiAgIyBGaXQgdGhlIG1vZGVsDQogIGZpdCA8LSB0cnkodWdhcmNoZml0KHNwZWMsIGRhdGEsIHNvbHZlciA9ICJoeWJyaWQiKSwgc2lsZW50ID0gVFJVRSkNCg0KICAjIFJldHVybiBzb21lIHN1bW1hcnkgc3RhdGlzdGljIG9yIGNyaXRlcmlvbiAoZS5nLiwgQUlDKQ0KICBpZiAoY2xhc3MoZml0KSA9PSAidHJ5LWVycm9yIikgew0KICAgIHJldHVybihOQSkNCiAgfSBlbHNlIHsNCiAgICByZXR1cm4oaW5mb2NyaXRlcmlhKGZpdClbIkFrYWlrZSIsXSkNCiAgfQ0KfQ0KDQojIEFwcGx5IHRoZSBmdW5jdGlvbiB0byBlYWNoIHJvdyBvZiB0aGUgbWF0cml4DQpyZXN1bHRzIDwtIGFwcGx5KG1hdCwgMSwgcnVuX2dhcmNoX21vZGVsKQ0KDQojIEFkZCByZXN1bHRzIHRvIHRoZSBvcmlnaW5hbCBtYXRyaXgNCm1hdCRHQVJDSF9BSUMgPC0gcmVzdWx0cw0KDQp1bmlxdWUobWF0JEdBUkNIX0FJQykNCmBgYA0KDQoNCg0K</div>
+<div id="rmd-source-code">LS0tDQp0aXRsZTogIkJhdGVtYW4gRXF1YXRpb24gLSBTZW5zaXRpdml0eSBBbmFseXNpcyINCm91dHB1dDogaHRtbF9ub3RlYm9vaw0KLS0tDQoNCiMjIFRoZW9yeQ0KDQpUaGUgQmF0ZW1hbiBlcXVhdGlvbiBpcyBvbmUgZXhhbXBsZSB3aGVyZSBzZW5zaXRpdml0eSBhbmFseXNpcyBjYW4gYmUgcGVyZm9ybWVkLiBJdCBpcyBhIG1hdGhlbWF0aWNhbCBtb2RlbCBkZXNjcmliaW5nIGFidW5kYW5jZXMgYW5kIGFjdGl2aXRpZXMgaW4gYSBkZWNheSBjaGFpbiBhcyBhIGZ1bmN0aW9uIG9mIHRpbWUsIGJhc2VkIG9uIHRoZSBkZWNheSByYXRlcyAoc3BlY2lmaWMgZm9yIGV2ZXJ5IHR5cGUgb2YgZWxlbWVudCkgYW5kIGluaXRpYWwgYWJ1bmRhbmNlcy4NCg0KVGhlIEJhdGVtYW4gZXF1YXRpb24gaXMgY2hhcmFjdGVyaXplZCBieSB0aGUgYWJzZW5jZSBvZiBmZWVkYmFja3MsIGhlbmNlIG1ha2luZyBpdCBhbmQgdGhlIHNlbnNpdGl2aXR5IGFuYWx5c2lzIGVhc2llciB0byBwZXJmb3JtIGFuZCBhc3Nlc3MuDQoNCiQkDQpcYmVnaW57YWxpZ259DQpcZnJhY3tkTl8xKHQpfXtkdH0gJj0gLVxsYW1iZGFfMSBOXzEodCkgXFwNClxmcmFje2ROX2kodCl9e2R0fSAmPSAtXGxhbWJkYV9pIE5faSh0KSArIFxsYW1iZGFfe2ktMX0gTl97aS0xfSh0KSBcXA0KXGZyYWN7ZE5fayh0KX17ZHR9ICY9IFxsYW1iZGFfe2stMX0gTl97ay0xfSh0KQ0KXGVuZHthbGlnbn0NCiQkDQoNCiQkDQpOX24odCkgPSBOXzEoMCkgXHRpbWVzIFxsZWZ0KCBccHJvZF97aT0xfV57bi0xfSBcbGFtYmRhX2kgXHJpZ2h0KSBcdGltZXMgXHN1bV97aT0xfV57bn0gXGZyYWN7ZV57LVxsYW1iZGFfaSB0fX17XHByb2Rfe1xzdWJzdGFja3tqPTEgXFwgaiBcbmVxIGl9fV57bn0gKFxsYW1iZGFfaiAtIFxsYW1iZGFfaSl9DQokJA0KDQojIyAyLiBTZW5zaXRpdml0eSBBbmFseXNpcyBhbmQgSW5kaWNlcw0KDQpXZSBhcmUgaW50ZXJlc3RlZCBpbiB0aGUgZmlyc3QgYW5kIHRvdGFsIHNlbnNpdGl2aXR5IGluZGljZXMuDQoNCkZyb20gb3VyIGdlbmVyaWMgbW9kZWw6DQokJFkgPSBmKFhfMSwgWF8yLCBcZG90cywgWF9rKSQkDQoNCmFuZCB0aGUgdmFyaWFuY2UgZGVjb21wb3NpdGlvbiBmb3JtdWxhOg0KJCRFX1hpIChWX3tYIFxzaW0gaX0oWXxYX2kpKSArIFZfe1hpfShFX3tYIFxzaW0gaX0oWXxYX2kpKSA9IFYoWSkkJA0KDQp3ZSBkZXJpdmUgdGhlIGZpcnN0LW9yZGVyIHNlbnNpdGl2aXR5IGluZGV4Og0KJCRTX2kgPSBcZnJhY3tWX3tYaX0oRV97WCBcc2ltIGl9KFl8WF9pKSl9e1YoWSl9JCQNCg0KYW5kIHRoZSB0b3RhbC1vcmRlciBzZW5zaXRpdml0eSBpbmRleDoNCiQkU197VGl9ID0gMSAtIFxmcmFje1YoRShZfFhfe1xzaW0gaX0pKX17VihZKX0gPSBcZnJhY3tFKFYoWXxYX3tcc2ltIGl9KSl9e1YoWSl9JCQNCg0KSWYgYSBtb2RlbCBpcyBhZGRpdGl2ZToNCiQkXHN1bV9pIFZfe1hpfSAoRV97WCBcc2ltIGl9KFl8WF9pKSkgPSBWKFkpJCQNCg0KIyMgQ29kaW5nDQoNClRoZSBhbmFseXNlcyB3aWxsIGJlIHBlcmZvcm1lZCB3aXRoIHRoZSBgc2Vuc29ib2xgIHBhY2thZ2UgYnkgUHV5IGV0IGFsLigyMDIyKS4gVGhlIHR3byBtb3N0IGltcG9ydGFudCBSIHBhY2thZ2VzLCBgZ2dwbG90MmAgYW5kIGB0aWR5dmVyc2VgLCBhcmUgYWxzbyB1c2VkIGZvciBkYXRhIHZpc3VhbGl6YXRpb24gYW5kIG1hbmlwdWxhdGlvbi4gYGdyaWRFeHRyYWAgZm9yIHBsb3R0aW5nIG11bHRpcGxlIGdyYXBocyBpbiBhIHNpbmdsZSBwbG90Lg0KYGBge3IgbWVzc2FnZT1UUlVFLCBpbmNsdWRlPUZBTFNFfQ0KbGlicmFyeShnZ3Bsb3QyKQ0KbGlicmFyeShzZW5zb2JvbCkNCmxpYnJhcnkodGlkeXZlcnNlKQ0KbGlicmFyeShncmlkRXh0cmEpDQpgYGANCg0KSXQgaXMgYWx3YXlzIGltcG9ydGFudCB0byBjaG9vc2UgYSByYW5kb20gc2VlZCwgaW4gb3JkZXIgdG8gbWFrZSB0aGUgcmVzdWx0cyByZXByb2R1Y2libGUuIFRoZSBjaG9zZW4gc2VlZCBudW1iZXIgY29tcGxldGVseSBhcmJpdHJhcnkuDQpgYGB7cn0NCnNldC5zZWVkKDEwMCkNCmBgYA0KDQpUaGUgdXNlci1kZWZpbmVkIGZ1bmN0aW9uIG9mIHRoZSBCYXRlbWFuIG1hc3RlciBlcXVhdGlvbiBpcyBkZWZpbmVkIGFzIGZvbGxvd3M6DQpgYGB7cn0NCmJhdGVtYW5fZXF1YXRpb24gPC0gZnVuY3Rpb24oTjAsIGxhbWJkYXMsIHQpIHsNCiAgbiA8LSBsZW5ndGgobGFtYmRhcykNCiAgcmVzdWx0IDwtIDANCiAgZm9yIChpIGluIHNlcV9sZW4obikpIHsNCiAgICBwcm9kdWN0IDwtIDENCiAgICBmb3IgKGogaW4gc2VxX2xlbihuKSkgew0KICAgICAgaWYgKGogIT0gaSkgew0KICAgICAgICBwcm9kdWN0IDwtIHByb2R1Y3QgKiAobGFtYmRhc1tqXSAtIGxhbWJkYXNbaV0pDQogICAgICB9DQogICAgfQ0KICAgIHJlc3VsdCA8LSByZXN1bHQgKyBleHAoLWxhbWJkYXNbaV0gKiB0KSAvIHByb2R1Y3QNCiAgfQ0KICByZXR1cm4oTjAgKiBwcm9kKGxhbWJkYXNbLW5dKSAqIHJlc3VsdCkNCn0NCmBgYA0KDQpXaXRoICRcbGFtYmRhID0gKDAsMzUsIDAuNiwgMC44KSQsIHRoZSBCYXRlbWFuIGVxdWF0aW9uIGlzIHBsb3R0ZWQgZm9yICR0ID0gMTAwJCBhbmQgYW4gaW5pdGlhbCBjb25jZW50cmF0aW9uIG9mICROXzEoMCkgPSAxJC4NCg0KYGBge3J9DQpsYW1iZGFzX3ZlY3RvciA8LSBjKDAuMzUsIDAuNiwgMC44KQ0KZXhhbXBsZV9yZXN1bHQgPC0gYmF0ZW1hbl9lcXVhdGlvbigxLCBsYW1iZGFzX3ZlY3RvciwgMTAwKQ0KcHJpbnQoZXhhbXBsZV9yZXN1bHQpDQpgYGANClRoZSBvdXRwdXQgcmV0dXJucyB0aGUgdGhpcmQgbnVjbGlkZSBjb25jZW50cmF0aW9uIGluIHRoZSBkZWNheSBjaGFpbiBhdCB0aW1lICR0ID0gMTAwJCwgZ2l2ZW4gdGhlIGluaXRpYWwgY29uY2VudHJhdGlvbiBhbmQgZGVjYXkgY29uc3RhbnRzLiBJdCBpcyB2aXJ0dWFsbHkgZXF1YWwgdG8gMC4NCg0KV2UgY2FuIGFsc28gc2VlIHRoaXMgd2l0aCBhIHBsb3Qgb2YgdGhlIEJhdGVtYW4gZXF1YXRpb24gZm9yIHRoZSBzYW1lIHBhcmFtZXRlcnMuDQoNCmBgYHtyfQ0KYmF0ZW1hbl9wbG90IDwtIGZ1bmN0aW9uKE4wLCBsYW1iZGFzLCB0KSB7DQogIG4gPC0gbGVuZ3RoKGxhbWJkYXMpDQogIG91dCA8LSBtYXRyaXgoMCwgbnJvdyA9IHQsIG5jb2wgPSBuKQ0KICBmb3IgKGkgaW4gc2VxX2xlbih0KSkgew0KICAgIGZvciAoaiBpbiBzZXFfbGVuKG4pKSB7DQogICAgICBvdXRbaSwgal0gPC0gYmF0ZW1hbl9lcXVhdGlvbihOMCwgbGFtYmRhc1sxOmpdLCBpKQ0KICAgIH0NCiAgfQ0KICANCiAgIyBDb252ZXJ0IG1hdHJpeCB0byBkYXRhZnJhbWUgZm9yIGdncGxvdA0KICBkZiA8LSBkYXRhLmZyYW1lKHRpbWUgPSByZXAoc2VxX2xlbih0KSwgbiksDQogICAgICAgICAgICAgICAgICAgdmFsdWUgPSBhcy52ZWN0b3Iob3V0KSwNCiAgICAgICAgICAgICAgICAgICBzZXJpZXMgPSBmYWN0b3IocmVwKHNlcV9sZW4obiksIGVhY2ggPSB0KSkpDQogIA0KICAjIFBsb3QgdXNpbmcgZ2dwbG90Mg0KICBnZ3Bsb3QoZGYsIGFlcyh4ID0gdGltZSwgeSA9IHZhbHVlLCBjb2xvciA9IHNlcmllcykpICsNCiAgICBnZW9tX2xpbmUobGluZXdpZHRoID0gMSkgKw0KICAgIGxhYnMoeCA9ICd0JywgeSA9ICdOX2sodCknLCBjb2xvciA9ICdTZXJpZXMnKSArDQogICAgdGhlbWVfbWluaW1hbCgpDQp9DQpgYGANCg0KYGBge3J9DQpiYXRlbWFuX3Bsb3QoMSwgbGFtYmRhc192ZWN0b3IsIDEwMCkNCmBgYA0KDQoNCmBgYHtyfQ0KbW9kZWwgPC0gZnVuY3Rpb24oTjAsIGxhbWJkYXMsIHQgPSAxKSB7DQogIG4gPC0gbGVuZ3RoKGxhbWJkYXMpDQogIG91dCA8LSBudW1lcmljKG4pICAjIEluaXRpYWxpemUgYSBudW1lcmljIHZlY3RvciB0byBzdG9yZSB0aGUgcmVzdWx0cw0KICBmb3IgKGogaW4gMTpuKSB7DQogICAgb3V0W2pdIDwtIGJhdGVtYW5fZXF1YXRpb24oTjAsIGxhbWJkYXNbMTpqXSwgdCkNCiAgfQ0KICByZXR1cm4ob3V0KQ0KfQ0KYGBgDQoNCg0KIyMjIFNlbnNpdGl2aXR5IEFuYWx5c2lzDQoNCk5vdyB0aGUgc2Vuc2l0aXZpdHkgYW5hbHlzaXMgaXMgcGVyZm9ybWVkIG9uIHRoZSBCYXRlbWFuIGVxdWF0aW9uLiBUaGUgc2Vuc2l0aXZpdHkgYW5hbHlzaXMgaXMgcGVyZm9ybWVkIHVzaW5nIHRoZSBTb2JvbCcgbWV0aG9kLCB3aGljaCBpcyBhIHZhcmlhbmNlLWJhc2VkIG1ldGhvZCB0aGF0IGRlY29tcG9zZXMgdGhlIHZhcmlhbmNlIG9mIHRoZSBvdXRwdXQgaW50byBjb250cmlidXRpb25zIGZyb20gZWFjaCBpbnB1dCBwYXJhbWV0ZXIgYW5kIHRoZWlyIGludGVyYWN0aW9ucy4NCg0KT3VyIGdvYWwgaXMgdG8gY29tcHV0ZSB0aGUgZmlyc3QgYW5kIHRvdGFsIHNlbnNpdGl2aXR5IGluZGljZXMgZm9yIGEgZGVjYXkgY2hhaW4gb2YgMywgNSwgYW5kIHRoZW4gNyBkZWNheSBjb25zdGFudHMgdG8gY29tcGFyZSB0aGUgcmVzdWx0cy4gT2J2aW91c2x5LCBpbiBvcmRlciB0byBtYWtlIGNvbnNpc3RlbnQgY29tcGFyaXNvbiwgdGhlIHNlbnNpdGl2aXR5IGFuYWx5c2lzIHBhcmFtZXRlcnMgbXVzdCBiZSBlcXVhbCBmb3IgZWFjaCBpdGVyYXRpb24uDQoNCkluIHBhcnRpY3VsYXIsIHRoZSBsYW1iZGFzIGFyZSBzYW1wbGVkIGZyb20gYSAkXG1hdGhjYWx7VX0gXHNpbSBbMCwgMV0kLg0KDQpUaGUgU0EgcGFyYW1ldGVycyBhcmUgZGVmaW5lZDoNCmBgYHtyfQ0KTiA8LSAyXjEyICMgTnVtYmVyIG9mIHNhbXBsZXMgDQpSIDwtIDEwMCANCmludGVydmFsIDwtIGMoYygwLjEsIDAuOTkpLCBjKDAuMSwgMC45OSksIGMoMC4xLCAwLjk5KSkgIyBOb3QgdXNlZA0KdHlwZSA8LSAibm9ybSI7IGNvbmYgPC0gMC41MA0KbmFtZVBhcmFtcyA8LSBwYXN0ZSgizrsiLCAxOmxlbmd0aChsYW1iZGFzKSwgc2VwID0gIiIpDQpgYGANCg0KVGhlIGRlc2lnbiBtYXRyaXggaXMgY3JlYXRlZCwgd2l0aCBlYWNoIHBhcmFtZXRlciAoaS5lLiwgdGhlIGxhbWJkYXMsIHNhbXBsZWQgZnJvbSBhIHVuaWZvcm0gZGlzdHJpYnV0aW9uLCBzZWUgYHR5cGUgPSAiUiJgKToNCmBgYHtyfQ0KZGVzaWduX21hdHJpeCA8LSBzb2JvbF9tYXRyaWNlcyhOID0gTiwgcGFyYW1zID0gbmFtZVBhcmFtcywgdHlwZSA9ICJSIikNCg0Kcm91bmQoYXBwbHkocm91bmQoZGVzaWduX21hdHJpeCwgMyksIDIsIG1lYW4pLCA0KQ0KYGBgDQoNClRoZSBvdXRwdXQgc2hvd3MgdGhlIG1lYW4gb2YgZWFjaCBsYW1iZGEsIHdoaWNoIGFyZSBjbG9zZSB0byAwLjUsIGFzIGV4cGVjdGVkLg0KDQpOb3cgdGhlIEJhdGVtYW4gZXF1YXRpb24gaXMgYXBwbGllZCB0byBlYWNoIHJvdywgcmVwcmVzZW50aW5nIGVhY2ggZXhwZXJpbWVudDoNCmBgYHtyfQ0KIyBJbml0aWFsaXplIGEgbnVtZXJpYyB2ZWN0b3IgdG8gc3RvcmUgdGhlIHJlc3VsdHMNCnJlc3VsdHNfYmF0ZW1hbiA8LSBudW1lcmljKG5yb3coZGVzaWduX21hdHJpeCkpDQoNCiMgTG9vcCB0aHJvdWdoIGVhY2ggcm93IGFuZCBhcHBseSB0aGUgYmF0ZW1hbl9lcXVhdGlvbiBmdW5jdGlvbg0KZm9yICh4IGluIDE6bnJvdyhkZXNpZ25fbWF0cml4KSkgew0KICByZXN1bHRzX2JhdGVtYW5beF0gPC0gYmF0ZW1hbl9lcXVhdGlvbigxLCBhcy5udW1lcmljKGRlc2lnbl9tYXRyaXhbeCwgXSksIHQgPSAxKQ0KfQ0KDQppbmQgPC0gc29ib2xfaW5kaWNlcyhZID0gcmVzdWx0c19iYXRlbWFuLCBOID0gTiwgcGFyYW1zID0gbmFtZVBhcmFtcywgYm9vdCA9IFRSVUUsIFIgPSBSLCB0eXBlID0gdHlwZSwgY29uZiA9IGNvbmYpDQoNCnBsb3QoaW5kKQ0KYGBgDQpUaGUgcGxvdCBzaG93cyB0aGUgaW5kaWNlcyBmb3IgZWFjaCBsYW1iZGEgKGNoYWluKS4gQXMgZXhwZWN0ZWQsIHRoZSAkU19pJCBpcyBzbWFsbGVyIHRoYW4gdGhlICRUX2kkLCBiZWluZyB0aGUgdG90YWwgc2Vuc2l0aXZpdHkgaW5kZXggdGhlIHN1bSBvZiB0aGUgZmlyc3Qtb3JkZXIgYW5kIGFsbCBoaWdoZXItb3JkZXIgaW5kaWNlcy4NCg0KVGhlIGludGVydmFsIGJhbmRzIGFyb3VuZCB0aGUgaW5kaWNlcyByZXByZXNlbnQgdGhlIGNvbmZpZGVuY2UgaW50ZXJ2YWwsIHdoaWNoIGlzIHNldCB0byAwLjUwIGluIHRoaXMgY2FzZS4gVHJ5IHRvIGluY3JlYXNlIGl0Lg0KDQpUaGUgU0EgaW5kaWNlcyBhcmUgbm93IGNvbXB1dGVkIGZvciA1IGFuZCA3IGxhbWJkYXMuDQoNCiMjIyBTQSB3aXRoIDUgY2hhaW5zDQpgYGB7cn0NCk4gPC0gMl4xMjsgUiA8LSAxMDANCmludGVydmFsIDwtIGMoYygwLjEsIDAuOTkpLCBjKDAuMSwgMC45OSksIGMoMC4xLCAwLjk5KSkgIyBOb3QgdXNlZA0KdHlwZSA8LSAibm9ybSI7IGNvbmYgPC0gMC41MA0KbmFtZVBhcmFtcyA8LSBwYXN0ZSgizrsiLCAxOmxlbmd0aChsYW1iZGFzKSwgc2VwID0gIiIpDQoNCmRlc2lnbl9tYXRyaXggPC0gc29ib2xfbWF0cmljZXMoTiA9IE4sIHBhcmFtcyA9IG5hbWVQYXJhbXMsIHR5cGUgPSAiUiIpDQoNCiMgSW5pdGlhbGl6ZSBhIG51bWVyaWMgdmVjdG9yIHRvIHN0b3JlIHRoZSByZXN1bHRzDQpyZXN1bHRzX2JhdGVtYW4gPC0gbnVtZXJpYyhucm93KGRlc2lnbl9tYXRyaXgpKQ0KDQojIExvb3AgdGhyb3VnaCBlYWNoIHJvdyBhbmQgYXBwbHkgdGhlIGJhdGVtYW5fZXF1YXRpb24gZnVuY3Rpb24NCmZvciAoeCBpbiAxOm5yb3coZGVzaWduX21hdHJpeCkpIHsNCiAgcmVzdWx0c19iYXRlbWFuW3hdIDwtIGJhdGVtYW5fZXF1YXRpb24oMSwgYXMubnVtZXJpYyhkZXNpZ25fbWF0cml4W3gsIF0pLCB0ID0gMSkNCn0NCg0KaW5kIDwtIHNvYm9sX2luZGljZXMoWSA9IHJlc3VsdHNfYmF0ZW1hbiwgTiA9IE4sIHBhcmFtcyA9IG5hbWVQYXJhbXMsIGJvb3QgPSBUUlVFLCBSID0gUiwgdHlwZSA9IHR5cGUsIGNvbmYgPSBjb25mKQ0KDQpwbG90KGluZCkNCmBgYA0KDQojIyMgU0Egd2l0aCA3IGNoYWlucw0KYGBge3J9DQpOIDwtIDJeMTI7IFIgPC0gMTAwDQppbnRlcnZhbCA8LSBjKGMoMC4xLCAwLjk5KSwgYygwLjEsIDAuOTkpLCBjKDAuMSwgMC45OSkpICMgTm90IHVzZWQNCnR5cGUgPC0gIm5vcm0iOyBjb25mIDwtIDAuNTANCm5hbWVQYXJhbXMgPC0gcGFzdGUoIs67IiwgMTpsZW5ndGgobGFtYmRhcyksIHNlcCA9ICIiKQ0KDQpkZXNpZ25fbWF0cml4IDwtIHNvYm9sX21hdHJpY2VzKE4gPSBOLCBwYXJhbXMgPSBuYW1lUGFyYW1zLCB0eXBlID0gIlIiKQ0KDQojIEluaXRpYWxpemUgYSBudW1lcmljIHZlY3RvciB0byBzdG9yZSB0aGUgcmVzdWx0cw0KcmVzdWx0c19iYXRlbWFuIDwtIG51bWVyaWMobnJvdyhkZXNpZ25fbWF0cml4KSkNCg0KIyBMb29wIHRocm91Z2ggZWFjaCByb3cgYW5kIGFwcGx5IHRoZSBiYXRlbWFuX2VxdWF0aW9uIGZ1bmN0aW9uDQpmb3IgKHggaW4gMTpucm93KGRlc2lnbl9tYXRyaXgpKSB7DQogIHJlc3VsdHNfYmF0ZW1hblt4XSA8LSBiYXRlbWFuX2VxdWF0aW9uKDEsIGFzLm51bWVyaWMoZGVzaWduX21hdHJpeFt4LCBdKSwgdCA9IDEpDQp9DQoNCmluZCA8LSBzb2JvbF9pbmRpY2VzKFkgPSByZXN1bHRzX2JhdGVtYW4sIE4gPSBOLCBwYXJhbXMgPSBuYW1lUGFyYW1zLCBib290ID0gVFJVRSwgUiA9IFIsIHR5cGUgPSB0eXBlLCBjb25mID0gY29uZikNCg0KcGxvdChpbmQpDQpgYGANCg0KVGhlIGxhc3QgY2hhaW4gaGFzIGJvdGggU2kgYW5kIFRpIGVxdWFsIHRvIDAsIG1lYW5pbmcgdGhlIGRlY2F5IGFscmVhZHkgaGFwcGVucyBhdCB0aGUgcHJldmlvdXMgc3RlcHMuDQo=</div>
 
 
 
@@ -2722,7 +2081,7 @@ $(document).ready(function () {
 <!-- code folding -->
 <script>
 $(document).ready(function () {
-  window.initializeSourceEmbed("Use of triggers.Rmd");
+  window.initializeSourceEmbed("GSA on Bateman Equations.Rmd");
   window.initializeCodeFolding("show" === "show");
 });
 </script>

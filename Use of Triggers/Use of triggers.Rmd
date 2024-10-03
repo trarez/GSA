@@ -13,15 +13,6 @@ The MOMP can be performed in a Montecarlo framework, by defining random triggers
 
 At each iteration combination of triggers, these are sampled randomly in an independent way, leading to a different identifiable model.
 
----
-
-# Example 1: Use of triggers in a Sobol' G Function, absolute values vs no absolute values
-
-To proceed step-by-step, a simple example of MOMP using triggers on the Sobol Function is performed, with a slight modification. As we already know from the previous notebook, the Sobol' G Function is a benchmark function for global sensitivity analysis. The function is defined as follows:
-
-$$ Y = \prod_{i = 1}^k \frac{|4X_i - 2| + a_i}{1 + a_i} \\ k = 8 \\ X_i \sim U[0, 1] \\ a = (0, 1, 4.5, 9, 99, 99, 99, 99) $$
-... but here with a caveat.
-Let's imagine, in this context, that the researcher does not know the correct specification, it is unsure whether the term $4X_i - 2$ is in absolute values or not. Trigger permits to explore the uncertainty for both cases simultaneously. Defined a binary choice, at each iteration one of the two model will be randomly selected between the two options.
 
 ## Coding, setting up the global environment:
 ```{r message=FALSE, warning=FALSE, include=FALSE}
@@ -94,7 +85,18 @@ The total-order sensitivity index $T_i$ "*jansen*" is calculated as:
 $$\frac{\frac{1}{2N} \sum_{v=1}^{N} \left[ f(\mathbf{A})_v - f\left( \mathbf{A}_{\mathbf{B}}^{(i)} \right)_v \right]^2}{V(y)}$$
 Both formulas come from [Saltelli et al. (2010)](https://www.sciencedirect.com/science/article/pii/S0010465509003087).
 
-Now define the Sobol' G Function with the two possible specifications:
+
+---
+
+# Example 1: Use of triggers in a Sobol' G Function, absolute values vs no absolute values
+
+To proceed step-by-step, a simple example of MOMP using triggers on the Sobol Function is performed, with a slight modification. As we already know from the previous notebook, the Sobol' G Function is a benchmark function for global sensitivity analysis. The function is defined as follows:
+
+$$ Y = \prod_{i = 1}^k \frac{|4X_i - 2| + a_i}{1 + a_i} \\ k = 8 \\ X_i \sim U[0, 1] \\ a = (0, 1, 4.5, 9, 99, 99, 99, 99) $$
+... but here with a caveat.
+Let's imagine, in this context, that the researcher does not know the correct specification, it is unsure whether the term $4X_i - 2$ is in absolute values or not. Trigger permits to explore the uncertainty for both cases simultaneously. Defined a binary choice, at each iteration one of the two model will be randomly selected between the two options.
+
+Write in code the Sobol' G Function with the two possible specifications:
 ```{r}
 sobol_Fun_0 <- function(X, vector) {
   # Model/function with absolute values
@@ -212,7 +214,7 @@ The trigger has the most important role in defining the output. This is suggeste
 
 We can compare these indices with the original Sobol G' Function indices.
 
-## Comparison: Single Original Sobol' G Function vs Triggered
+Comparison: Single Original Sobol' G Function vs Triggered
 
 Create the same design matrix, without the trigger columns, and compute the results:
 ```{r}
